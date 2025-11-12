@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "ultralyzer"
+version = "0.1.0"
+description = "A pipeline to analyze retinal UltraWidefield images using GUI and background processing."
+authors = ["Borja Marin <bmarin@ed.ac.uk>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pillow = "^9.0"
+tqdm = "^4.0"
+PySide6 = "^6.10.0"
+SQLAlchemy = "^2.0.44"
+torch = "^2.9.0"
+torchvision = "^0.24.0"
+segmentation-models-pytorch = "^0.4.0"
+# GUI framework (uncomment or replace as needed)
+# pyqt5 = "^5.15"
+# tkinter is built-in
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
