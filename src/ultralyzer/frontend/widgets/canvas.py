@@ -1,4 +1,4 @@
-from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QUndoCommand
+from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QUndoCommand, QColor
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PySide6.QtCore import Qt, Signal
 import numpy as np
@@ -87,6 +87,8 @@ class OverlayLayer:
         valid_channels = OVERLAY_MAP.keys()
         if value not in valid_channels:
             return
+        if self._channel == value:
+            return
         self._channel = value
         self._update_display()
     
@@ -139,7 +141,12 @@ class OverlayLayer:
             transparent.fill(Qt.GlobalColor.transparent)
             self._pixmap = transparent
             return
-    
+
+        # Create pixmap and apply filtering in one step
+        self._pixmap = self._qimage_to_filtered_pixmap()
+
+    def _qimage_to_filtered_pixmap(self) -> QPixmap:
+        """Convert QImage to filtered QPixmap - where filtering actually happens"""
         display_image = self._qimage.copy()
         
         if self._channel == "arteries":
@@ -148,8 +155,8 @@ class OverlayLayer:
             self._filter_channel(display_image, keep_red=False, keep_blue=True)
         # else: "both" - keep as is
         
-        self._pixmap = QPixmap.fromImage(display_image)
-
+        return QPixmap.fromImage(display_image)
+    
     def _filter_channel(self, qimage: QImage, keep_red: bool, keep_blue: bool):
         """Modify QImage to show only selected channels"""
         # Get writable buffer
@@ -169,7 +176,8 @@ class OverlayLayer:
             pixels[:, :, 0] = 0 # Blue channel
         
         # Update alpha based on remaining visible channels
-        pixels[:, :, 3] = np.max(pixels[:, :, 0:3], axis=2)
+        pixels[:, :, 3] = np.bitwise_or(np.bitwise_or(pixels[:, :, 0], pixels[:, :, 1]), pixels[:, :, 2])
+        # pixels[:, :, 3] = np.max(pixels[:, :, 0:3], axis=2)
 
     def _draw_brush_segment(self, points, radius: int):
         """Draw a single line segment on the overlay"""
@@ -184,6 +192,8 @@ class OverlayLayer:
             pen.setColor(Qt.GlobalColor.red)
         elif self.channel == 'veins':
             pen.setColor(Qt.GlobalColor.blue)
+        elif self.channel == 'both':
+            pen.setColor(QColor(255, 0, 255))
             
         painter.setPen(pen)
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
@@ -240,7 +250,12 @@ class BrushStrokeCommand(QUndoCommand):
         pen.setWidth(2 * self.radius)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        pen.setColor(Qt.GlobalColor.red if self.channel == "arteries" else Qt.GlobalColor.blue)
+        if self.channel == "arteries":
+            pen.setColor(Qt.GlobalColor.red)
+        elif self.channel == "veins":
+            pen.setColor(Qt.GlobalColor.blue)
+        elif self.channel == "both":
+            pen.setColor(QColor(255, 0, 255))
         painter.setPen(pen)
         
         for i in range(len(self.points) - 1):
@@ -365,7 +380,7 @@ class Canvas(QGraphicsView):
             return
         self.overlay_layer.channel = channel
         self.update_overlay_display()
-    
+
     ################ PUBLIC METHODS ################
     
     def update_image_display(self):
@@ -466,24 +481,25 @@ class Canvas(QGraphicsView):
         # Draw only the new segment (last 2 points)
         if len(self.stroke_points) >= 2:
             segment = self.stroke_points[-2:]
-            if self.current_tool == "brush":
+            if self.current_tool == "brush" and self.overlay_layer.channel != 'none':
                 self.overlay_layer._draw_brush_segment(segment, self.brush_radius)
-            elif self.current_tool == "eraser":
+            elif self.current_tool == "eraser" and self.overlay_layer.channel == 'both':
                 self.overlay_layer._draw_erase_segment(segment, self.brush_radius)
             self.update_overlay_display()
 
     def mouseReleaseEvent(self, event):
         """Finalize the stroke by pushing to undo stack"""
-        if self.current_tool is None or not self.stroke_points:
+        if self.current_tool is None or len(self.stroke_points) < 2:
+            self.stroke_points = []
             return
         
         # Push entire stroke to undo stack once
-        if self.current_tool == "brush":
+        if self.current_tool == "brush" and self.overlay_layer.channel != 'none':
             command = BrushStrokeCommand(self.overlay_layer, self._temp_overlay_qimage, 
                                          self.stroke_points, self.overlay_layer.channel, 
                                          self.brush_radius)
             self.overlay_layer._undo_stack.push(command)
-        elif self.current_tool == "eraser":
+        elif self.current_tool == "eraser" and self.overlay_layer.channel == 'both':
             command = EraseCommand(self.overlay_layer, self._temp_overlay_qimage, 
                                    self.stroke_points, self.brush_radius)
             self.overlay_layer._undo_stack.push(command)

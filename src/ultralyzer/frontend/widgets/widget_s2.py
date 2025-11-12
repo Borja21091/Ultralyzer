@@ -177,12 +177,6 @@ class SegmentationWidget(BaseWidget):
         
         layout.addWidget(self.main_splitter, 1)
         
-        # # Main content area: Canvas
-        # self.canvas_container = QWidget()
-        # canvas_layout = QVBoxLayout(self.canvas_container)
-        # canvas_layout.addWidget(QLabel("Load an image to begin"))
-        # layout.addWidget(self.canvas_container, 1)
-        
         # Bottom section: Controls
         bottom_layout = QHBoxLayout()
         
@@ -234,13 +228,6 @@ class SegmentationWidget(BaseWidget):
         self.btn_edit.setStyleSheet(button_styles["segment"]["normal"])
         self.btn_edit.clicked.connect(self._on_edit_mode_toggle)
         buttons_layout.addWidget(self.btn_edit)
-        
-        #  # Edit toolbar (hidden by default)
-        # edit_toolbar_layout = self._create_edit_toolbar()
-        # self.edit_toolbar_widget = QWidget()
-        # self.edit_toolbar_widget.setLayout(edit_toolbar_layout)
-        # self.edit_toolbar_widget.setVisible(False)
-        # buttons_layout.addWidget(self.edit_toolbar_widget)
         
         # TODO: Create 'Segment Single' button and implement logic
         # Segment button
@@ -456,6 +443,10 @@ class SegmentationWidget(BaseWidget):
             self.canvas.reset_layers(image_layer, overlay_layer)
         self.canvas.signal_zoom_changed.connect(self._update_brush_cursor)
         
+        # Set canvas edge color
+        qc_decision = self.db_manager.get_qc_result(name).decision.value
+        self.canvas_color = qc_decision
+        
         # Center the image on the canvas
         self.canvas.centerOn(self.canvas.scene.itemsBoundingRect().center()) # Move to center
         # self.canvas.fitInView(self.canvas.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio) # Move to center + scale to fit
@@ -507,7 +498,7 @@ class SegmentationWidget(BaseWidget):
             self.canvas.setCursor(cursor)
         
     ############ ACTIONS ############
-
+    
     def _on_next(self):
         """Move to next image"""
         if self.has_unsaved_changes:
