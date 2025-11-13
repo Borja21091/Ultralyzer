@@ -70,6 +70,7 @@ class OverlayLayer:
         self._overlay_array = overlay_array  # RGB, kept for data persistence
         self._qimage = self._array_to_qimage(overlay_array) # RGBA for fast editing
         self._channel = "both"
+        self._opacity = 0.75
         self._pixmap = None
         self._undo_stack = QUndoStack()
         self._update_display()
@@ -93,6 +94,17 @@ class OverlayLayer:
         if self._channel == value:
             return
         self._channel = value
+        self._update_display()
+    
+    @property
+    def opacity(self) -> float:
+        """Get overlay opacity (0.0 to 1.0)"""
+        return self._opacity
+    
+    @opacity.setter
+    def opacity(self, value: float):
+        """Set overlay opacity (0.0 to 1.0)"""
+        self._opacity = max(0.0, min(1.0, value))
         self._update_display()
     
     ############ GETTER/SETTER ############
@@ -234,7 +246,22 @@ class OverlayLayer:
             self._filter_channel(display_image, keep_red=False, keep_blue=True)
         # else: "both" - keep as is
         
+        self._apply_opacity(display_image)
+        
         return QPixmap.fromImage(display_image)
+    
+    def _apply_opacity(self, qimage: QImage):
+        """Modify QImage alpha channel based on opacity setting"""
+        ptr = qimage.bits()
+        h, w = qimage.height(), qimage.width()
+        byte_count = qimage.bytesPerLine() * h
+        
+        # Create numpy view of pixel data (ARGB32)
+        pixels = np.ndarray((byte_count,), dtype=np.uint8, buffer=ptr)
+        pixels = pixels.reshape((h, w, 4))
+        
+        # Scale alpha channel by opacity
+        pixels[:, :, 3] = (pixels[:, :, 3] * self.opacity).astype(np.uint8)
     
     def _filter_channel(self, qimage: QImage, keep_red: bool, keep_blue: bool):
         """Modify QImage to show only selected channels"""
@@ -256,7 +283,6 @@ class OverlayLayer:
         
         # Update alpha based on remaining visible channels
         pixels[:, :, 3] = np.bitwise_or(np.bitwise_or(pixels[:, :, 0], pixels[:, :, 1]), pixels[:, :, 2])
-        # pixels[:, :, 3] = np.max(pixels[:, :, 0:3], axis=2)
 
     def _draw_brush_segment(self, points, radius: int):
         """Draw a single line segment on the overlay"""
@@ -306,7 +332,7 @@ class OverlayLayer:
         if self.channel not in color_map:
             return
         
-        b_val, r_val, _ = color_map[self.channel]
+        b_val, r_val = color_map[self.channel]
         
         # Get overlay pixels directly (avoid creating temp QImage)
         overlay_ptr = self._qimage.bits()
@@ -481,6 +507,11 @@ class Canvas(QGraphicsView):
         if channel not in OVERLAY_MAP.keys():
             return
         self.overlay_layer.channel = channel
+        self.update_overlay_display()
+
+    def set_overlay_opacity(self, opacity: float):
+        """Set overlay opacity (0.0 to 1.0) and update display"""
+        self.overlay_layer.opacity = opacity
         self.update_overlay_display()
 
     ################ PUBLIC METHODS ################

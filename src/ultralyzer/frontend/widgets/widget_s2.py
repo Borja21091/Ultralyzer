@@ -30,6 +30,9 @@ class SegmentationWidget(BaseWidget):
         # vessel_segmentor = VesselSegmentor()
         # self.seg_step = SegmentationStep(segmentor, vessel_segmentor, self.db_manager)
         
+        # Overlay opacity
+        self._overlay_opacity = 0.75
+        
         # Edit mode state
         self._edit_mode = False
         self._overlay_layer: OverlayLayer = None
@@ -208,6 +211,24 @@ class SegmentationWidget(BaseWidget):
         self.overlay_combo.setCurrentText("Both")
         self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
         seg_layout.addWidget(self.overlay_combo)
+        
+        # Opacity slider
+        seg_layout.addSpacing(10)
+        seg_layout.addWidget(QLabel("Opacity:"))
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setMinimum(0)
+        self.opacity_slider.setMaximum(100)
+        self.opacity_slider.setValue(75)
+        self.opacity_slider.setMaximumWidth(120)
+        self.opacity_slider.setToolTip("Adjust overlay opacity")
+        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        seg_layout.addWidget(self.opacity_slider)
+        
+        self.opacity_label = QLabel("75%")
+        self.opacity_label.setMaximumWidth(35)
+        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        seg_layout.addWidget(self.opacity_label)
+        
         controls_layout.addLayout(seg_layout, 1)
         
         bottom_layout.addLayout(controls_layout, 1)
@@ -457,6 +478,7 @@ class SegmentationWidget(BaseWidget):
                 overlay_array = np.array(Image.open(mask_path))
         
         overlay_layer = OverlayLayer(overlay_array)
+        overlay_layer.opacity = self._overlay_opacity
         self._overlay_layer = overlay_layer
         
         # Create canvas only once, or update existing canvas
@@ -674,3 +696,16 @@ class SegmentationWidget(BaseWidget):
         Image.fromarray(overlay_array).save(mask_path)
         
         self.status_text.emit(f"Edits saved to {mask_path}")
+
+    def _on_opacity_changed(self, value: int):
+        """Handle opacity slider changes"""
+        # Update label with percentage
+        self.opacity_label.setText(f"{value}%")
+        
+        # Store opacity for future images
+        self._overlay_opacity = value / 100.0
+        
+        # Convert to 0.0-1.0 range and update canvas
+        opacity_normalized = value / 100.0
+        if self.canvas is not None:
+            self.canvas.set_overlay_opacity(opacity_normalized)
