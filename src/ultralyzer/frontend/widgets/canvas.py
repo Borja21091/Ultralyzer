@@ -304,7 +304,7 @@ class OverlayLayer:
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
         painter.end()
 
-    def _draw_erase_segment(self, points, radius: int):
+    def _draw_erase_segment_original(self, points, radius: int):
         """Erase a single line segment"""
         painter = QPainter(self._qimage)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -316,6 +316,36 @@ class OverlayLayer:
         painter.setPen(pen)
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
         painter.end()
+    
+    def _draw_erase_segment(self, points, radius: int):
+        """Erase a single line segment, respecting the current channel"""
+        # Get pixel data directly for selective channel erasing
+        ptr = self._qimage.bits()
+        h, w = self._qimage.height(), self._qimage.width()
+        pixels = np.ndarray((h, w, 4), dtype=np.uint8, buffer=ptr)
+        
+        # Create mask for the stroke area
+        mask = np.zeros((h, w), dtype=np.uint8)
+        x0, y0 = int(points[0][0]), int(points[0][1])
+        x1, y1 = int(points[1][0]), int(points[1][1])
+        cv2.line(mask, (x0, y0), (x1, y1), 255, int(2 * radius), cv2.LINE_AA)
+        
+        # Apply selective channel erasing
+        erase_area = mask > 0
+        
+        if self.channel == "arteries":
+            # Only erase red channel
+            pixels[erase_area, 2] = 0
+        elif self.channel == "veins":
+            # Only erase blue channel
+            pixels[erase_area, 0] = 0
+        elif self.channel == "both":
+            # Erase both red and blue channels
+            pixels[erase_area, 0] = 0  # Blue
+            pixels[erase_area, 2] = 0  # Red
+        
+        # Update alpha channel based on remaining visible channels
+        pixels[erase_area, 3] = np.bitwise_or(np.bitwise_or(pixels[erase_area, 0], pixels[erase_area, 1]), pixels[erase_area, 2])
     
     def _draw_smart_paint_segment(self, points, radius: int):
         """
@@ -453,6 +483,8 @@ class Canvas(QGraphicsView):
         # Position overlay on top of image
         self.overlay_item.setPos(0, 0)
         
+        self._edit_mode = False
+        
         # Pan and zoom variables
         self._pan_start = None
         self._is_panning = False
@@ -481,11 +513,18 @@ class Canvas(QGraphicsView):
         """Get the current overlay layer channel"""
         return self.overlay_layer.channel
     
+    def set_edit_mode(self, enabled: bool):
+        """Enable or disable edit mode"""
+        self._edit_mode = enabled
+    
     def set_tool(self, tool: str):
         """Set the current tool: 'brush', 'smart_paint', 'eraser' or 'change'"""
         self.current_tool = tool
         if tool and tool.lower() in ['brush', 'smart_paint']:
             self.set_brush_channel(self.get_overlay_channel())
+        
+        # Set focus to capture keyboard events
+        self.setFocus()
 
     def set_brush_channel(self, channel: str):
         """Set the current brush channel: 'arteries' or 'veins'"""
@@ -592,7 +631,7 @@ class Canvas(QGraphicsView):
     
     def mousePressEvent(self, event):
         """Start collecting stroke points"""
-        if self.current_tool is None:
+        if self._is_panning or self.current_tool is None:
             # Let parent class handle panning/default behavior
             super().mousePressEvent(event)
             return
@@ -613,7 +652,7 @@ class Canvas(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         """Add points to current stroke"""
-        if self.current_tool is None or not self.stroke_points:
+        if self._is_panning or self.current_tool is None or not self.stroke_points:
             super().mouseMoveEvent(event)
             return
         pos = self.mapToScene(event.position().toPoint())
@@ -626,7 +665,7 @@ class Canvas(QGraphicsView):
                 self.overlay_layer._draw_brush_segment(segment, self.brush_radius)
             elif self.current_tool == "smart_paint" and self.overlay_layer.channel != 'none':
                 self.overlay_layer._draw_smart_paint_segment(segment, self.brush_radius)
-            elif self.current_tool == "eraser" and self.overlay_layer.channel == 'both':
+            elif self.current_tool == "eraser" and self.overlay_layer.channel != 'none':
                 self.overlay_layer._draw_erase_segment(segment, self.brush_radius)
             self.update_overlay_display()
 
@@ -634,6 +673,7 @@ class Canvas(QGraphicsView):
         """Finalize the stroke by pushing to undo stack"""
         if self.current_tool is None or len(self.stroke_points) < 2:
             self.stroke_points = []
+            super().mouseReleaseEvent(event)
             return
         
         # Push entire stroke to undo stack once
@@ -647,7 +687,7 @@ class Canvas(QGraphicsView):
                                          self.stroke_points, self.overlay_layer.channel, 
                                          self.brush_radius)
             self.overlay_layer._undo_stack.push(command)
-        elif self.current_tool == "eraser" and self.overlay_layer.channel == 'both':
+        elif self.current_tool == "eraser" and self.overlay_layer.channel != 'none':
             command = EraseCommand(self.overlay_layer, self._temp_overlay_qimage, 
                                    self.stroke_points, self.brush_radius)
             self.overlay_layer._undo_stack.push(command)
@@ -669,10 +709,9 @@ class Canvas(QGraphicsView):
     def keyPressEvent(self, event):
         """Handle keyboard events"""
         # Spacebar for pan mode
-        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+        if event.key() == Qt.Key.Key_Space and self._edit_mode and not event.isAutoRepeat():
             self._is_panning = True
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
             event.accept()
         else:
             super().keyPressEvent(event)
@@ -680,10 +719,10 @@ class Canvas(QGraphicsView):
     def keyReleaseEvent(self, event):
         """Handle keyboard release"""
         # Exit pan mode when spacebar is released
-        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+        if event.key() == Qt.Key.Key_Space and self._edit_mode and not event.isAutoRepeat():
             self._is_panning = False
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+            # self.setCursor(Qt.CursorShape.ArrowCursor)
             event.accept()
         else:
             super().keyReleaseEvent(event)
@@ -693,4 +732,3 @@ class Canvas(QGraphicsView):
         self.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom_level = 1.0
         event.accept()
-

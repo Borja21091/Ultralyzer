@@ -188,105 +188,265 @@ class SegmentationWidget(BaseWidget):
         # Bottom section: Controls
         bottom_layout = QHBoxLayout()
         
-        # Left: Channel & Segmentation selectors
-        controls_layout = QHBoxLayout()
-        
-        # Channel selector
-        channel_layout = QHBoxLayout()
-        self.channel_combo = QComboBox()
-        self.channel_combo.setToolTip("Display Channel")
-        self.channel_combo.addItems(["Color", "Red", "Green", "Blue"])
-        self.channel_combo.setCurrentText("Color")
-        self.channel_combo.currentTextChanged.connect(self._on_image_channel_changed)
-        channel_layout.addWidget(self.channel_combo)
-        channel_layout.addStretch()
-        controls_layout.addLayout(channel_layout, 1)
-        
-        # Segmentation controls
-        seg_layout = QHBoxLayout()
-        
-        self.overlay_combo = QComboBox()
-        self.overlay_combo.setToolTip("Segmentation Overlay")
-        self.overlay_combo.addItems(["Arteries", "Veins", "Both", "None"])
-        self.overlay_combo.setCurrentText("Both")
-        self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
-        seg_layout.addWidget(self.overlay_combo)
-        
-        # Opacity slider
-        seg_layout.addSpacing(10)
-        seg_layout.addWidget(QLabel("Opacity:"))
-        self.opacity_slider = QSlider(Qt.Horizontal)
-        self.opacity_slider.setMinimum(0)
-        self.opacity_slider.setMaximum(100)
-        self.opacity_slider.setValue(75)
-        self.opacity_slider.setMaximumWidth(120)
-        self.opacity_slider.setToolTip("Adjust overlay opacity")
-        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
-        seg_layout.addWidget(self.opacity_slider)
-        
-        self.opacity_label = QLabel("75%")
-        self.opacity_label.setMaximumWidth(35)
-        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        seg_layout.addWidget(self.opacity_label)
-        
-        controls_layout.addLayout(seg_layout, 1)
-        
-        bottom_layout.addLayout(controls_layout, 1)
-
-        # Right: Segmentation & navigation buttons
-        buttons_layout = self._create_segmentation_buttons()
-        bottom_layout.addLayout(buttons_layout, 1)
+        # Create all button sections (now includes display controls)
+        buttons_layout = self._create_bottom_section()
+        bottom_layout.addLayout(buttons_layout)
         
         layout.addLayout(bottom_layout)
         
         # Shortcuts
         self._setup_shortcuts()
 
-    def _create_segmentation_buttons(self) -> QVBoxLayout:
-        """Create segmentation button layout"""
-        buttons_layout = QVBoxLayout()
+    def _create_bottom_section_original(self) -> QHBoxLayout:
+        """Create segmentation button layout with three sections: Display | Current Image | Segment All + Nav"""
+        buttons_layout = QHBoxLayout()
         button_styles = self.button_styles
 
-        # Edit button
+        # LEFT SECTION: Display Controls (vertical channel/overlay + vertical opacity slider)
+        display_layout = QHBoxLayout()
+        
+        # Combobox section (vertical stacking)
+        combo_layout = QVBoxLayout()
+        
+        # Channel selector with label
+        channel_label = QLabel("Channel:")
+        channel_label.setMaximumWidth(70)
+        self.channel_combo = QComboBox()
+        self.channel_combo.setMinimumWidth(100)
+        self.channel_combo.setMaximumWidth(200)
+        self.channel_combo.setToolTip("Display Channel")
+        self.channel_combo.addItems(["Color", "Red", "Green", "Blue"])
+        self.channel_combo.setCurrentText("Color")
+        self.channel_combo.currentTextChanged.connect(self._on_image_channel_changed)
+        combo_layout.addWidget(channel_label)
+        combo_layout.addWidget(self.channel_combo)
+        
+        # Segmentation overlay selector with label
+        overlay_label = QLabel("Overlay:")
+        overlay_label.setMaximumWidth(70)
+        self.overlay_combo = QComboBox()
+        self.overlay_combo.setMinimumWidth(100)
+        self.overlay_combo.setMaximumWidth(200)
+        self.overlay_combo.setToolTip("Segmentation Overlay")
+        self.overlay_combo.addItems(["Arteries", "Veins", "Both", "None"])
+        self.overlay_combo.setCurrentText("Both")
+        self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
+        combo_layout.addWidget(overlay_label)
+        combo_layout.addWidget(self.overlay_combo)
+        
+        display_layout.addLayout(combo_layout)
+        display_layout.addSpacing(15)
+        
+        # Opacity slider section (vertical)
+        opacity_layout = QVBoxLayout()
+        opacity_label = QLabel("Opacity:")
+        opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opacity_layout.addWidget(opacity_label)
+        
+        self.opacity_slider = QSlider(Qt.Vertical)
+        self.opacity_slider.setMinimum(0)
+        self.opacity_slider.setMaximum(100)
+        self.opacity_slider.setValue(75)
+        self.opacity_slider.setMaximumHeight(100)
+        self.opacity_slider.setToolTip("Adjust overlay opacity")
+        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        opacity_layout.addWidget(self.opacity_slider, alignment=Qt.AlignmentFlag.AlignHCenter)
+        
+        self.opacity_label = QLabel("75%")
+        self.opacity_label.setMaximumWidth(35)
+        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opacity_layout.addWidget(self.opacity_label)
+        
+        display_layout.addLayout(opacity_layout)
+        
+        buttons_layout.addLayout(display_layout, 0)
+        buttons_layout.addStretch()
+        
+        # MIDDLE SECTION: Current Image Actions (vertical stacking)
+        current_image_layout = QVBoxLayout()
+        
+        self.btn_segment_current = QPushButton("⏩ Segment Current")
+        self.btn_segment_current.setMaximumWidth(200)
+        self.btn_segment_current.setMinimumHeight(40)
+        self.btn_segment_current.setStyleSheet(button_styles["segment"]["normal"])
+        self.btn_segment_current.clicked.connect(self._on_segment_current_image)
+        current_image_layout.addWidget(self.btn_segment_current)
+        
         self.btn_edit = QPushButton("✏️ Edit Mask")
         self.btn_edit.setMaximumWidth(200)
         self.btn_edit.setMinimumHeight(40)
         self.btn_edit.setStyleSheet(button_styles["segment"]["normal"])
         self.btn_edit.clicked.connect(self._on_edit_mode_toggle)
-        buttons_layout.addWidget(self.btn_edit)
+        current_image_layout.addWidget(self.btn_edit)
         
-        # TODO: Create 'Segment Single' button and implement logic
-        # Segment button
+        buttons_layout.addLayout(current_image_layout, 0)
+        buttons_layout.addSpacing(50)
+        
+        # RIGHT SECTION: Segment All (top) + Navigation (bottom)
+        right_layout = QVBoxLayout()
+        right_layout.addSpacing(10)
+        
         self.btn_segment = QPushButton("⏩ Segment All")
         self.btn_segment.setMaximumWidth(200)
         self.btn_segment.setMinimumHeight(40)
         self.btn_segment.setStyleSheet(button_styles["segment"]["normal"])
         self.btn_segment.clicked.connect(self._on_start_segmentation)
-        buttons_layout.addWidget(self.btn_segment)
+        right_layout.addWidget(self.btn_segment)
         
-        buttons_layout.addStretch()
-        
-        # Navigation buttons
+        # Navigation buttons (horizontal)
         nav_layout = QHBoxLayout()
         
         self.btn_prev = QPushButton("◀ Previous")
-        self.btn_prev.setMaximumWidth(90)
-        self.btn_prev.setMinimumHeight(35)
+        self.btn_prev.setMaximumWidth(100)
+        self.btn_prev.setMinimumHeight(40)
         self.btn_prev.setStyleSheet(button_styles["nav"]["normal"])
         self.btn_prev.clicked.connect(self._on_prev)
         nav_layout.addWidget(self.btn_prev)
         
         self.btn_next = QPushButton("Next ▶")
-        self.btn_next.setMaximumWidth(90)
-        self.btn_next.setMinimumHeight(35)
+        self.btn_next.setMaximumWidth(100)
+        self.btn_next.setMinimumHeight(40)
         self.btn_next.setStyleSheet(button_styles["nav"]["normal"])
         self.btn_next.clicked.connect(self._on_next)
         nav_layout.addWidget(self.btn_next)
         
-        buttons_layout.addLayout(nav_layout)
+        nav_layout.addSpacing(10)
+        right_layout.addLayout(nav_layout)
+        right_layout.addSpacing(5)
+        
+        buttons_layout.addLayout(right_layout, 0)
 
         return buttons_layout
+    
+    def _create_bottom_section(self) -> QHBoxLayout:
+        """Create segmentation button layout with three sections: Display | Current Image | Segment All + Nav"""
+        buttons_layout = QHBoxLayout()
+        button_styles = self.button_styles
 
+        # LEFT SECTION: Display Controls (vertical channel/overlay + vertical opacity slider)
+        display_layout = QHBoxLayout()
+        
+        # Combobox section (vertical stacking)
+        combo_layout = QVBoxLayout()
+        
+        # Channel selector with label
+        channel_label = QLabel("Channel:")
+        channel_label.setMaximumWidth(70)
+        self.channel_combo = QComboBox()
+        self.channel_combo.setMinimumWidth(100)
+        self.channel_combo.setMaximumWidth(200)
+        self.channel_combo.setToolTip("Display Channel")
+        self.channel_combo.addItems(["Color", "Red", "Green", "Blue"])
+        self.channel_combo.setCurrentText("Color")
+        self.channel_combo.currentTextChanged.connect(self._on_image_channel_changed)
+        combo_layout.addWidget(channel_label)
+        combo_layout.addWidget(self.channel_combo)
+        
+        # Segmentation overlay selector with label
+        overlay_label = QLabel("Overlay:")
+        overlay_label.setMaximumWidth(70)
+        self.overlay_combo = QComboBox()
+        self.overlay_combo.setMinimumWidth(100)
+        self.overlay_combo.setMaximumWidth(200)
+        self.overlay_combo.setToolTip("Segmentation Overlay")
+        self.overlay_combo.addItems(["Arteries", "Veins", "Both", "None"])
+        self.overlay_combo.setCurrentText("Both")
+        self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
+        combo_layout.addWidget(overlay_label)
+        combo_layout.addWidget(self.overlay_combo)
+        
+        display_layout.addLayout(combo_layout)
+        display_layout.addSpacing(15)
+        
+        # Opacity slider section (vertical)
+        opacity_layout = QVBoxLayout()
+        opacity_label = QLabel("Opacity:")
+        opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opacity_layout.addWidget(opacity_label)
+        
+        self.opacity_slider = QSlider(Qt.Vertical)
+        self.opacity_slider.setMinimum(0)
+        self.opacity_slider.setMaximum(100)
+        self.opacity_slider.setValue(75)
+        self.opacity_slider.setMaximumHeight(100)
+        self.opacity_slider.setToolTip("Adjust overlay opacity")
+        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        opacity_layout.addWidget(self.opacity_slider, alignment=Qt.AlignmentFlag.AlignHCenter)
+        
+        self.opacity_label = QLabel("75%")
+        self.opacity_label.setMaximumWidth(35)
+        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opacity_layout.addWidget(self.opacity_label)
+        
+        display_layout.addLayout(opacity_layout)
+        
+        # MIDDLE SECTION: Current Image Actions (vertical stacking)
+        current_image_layout = QVBoxLayout()
+        current_image_layout.setContentsMargins(0, 0, 0, 0)
+        current_image_layout.setSpacing(5)
+        
+        self.btn_segment_current = QPushButton("⏩ Segment Current")
+        self.btn_segment_current.setMinimumHeight(40)
+        self.btn_segment_current.setStyleSheet(button_styles["segment"]["normal"])
+        self.btn_segment_current.clicked.connect(self._on_segment_current_image)
+        current_image_layout.addWidget(self.btn_segment_current)
+        
+        self.btn_edit = QPushButton("✏️ Edit Mask")
+        self.btn_edit.setMinimumHeight(40)
+        self.btn_edit.setStyleSheet(button_styles["segment"]["normal"])
+        self.btn_edit.clicked.connect(self._on_edit_mode_toggle)
+        current_image_layout.addWidget(self.btn_edit)
+        
+        # RIGHT SECTION: Segment All (top) + Navigation (bottom)
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(5)
+        
+        self.btn_segment = QPushButton("⏩ Segment All")
+        self.btn_segment.setMinimumHeight(40)
+        self.btn_segment.setStyleSheet(button_styles["segment"]["normal"])
+        self.btn_segment.clicked.connect(self._on_start_segmentation)
+        right_layout.addWidget(self.btn_segment)
+        
+        # Navigation buttons (horizontal - same width, dynamic sizing)
+        nav_layout = QHBoxLayout()
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(5)
+        
+        self.btn_prev = QPushButton("◀ Previous")
+        self.btn_prev.setMinimumHeight(40)
+        self.btn_prev.setStyleSheet(button_styles["nav"]["normal"])
+        self.btn_prev.clicked.connect(self._on_prev)
+        nav_layout.addWidget(self.btn_prev, 1)
+        
+        self.btn_next = QPushButton("Next ▶")
+        self.btn_next.setMinimumHeight(40)
+        self.btn_next.setStyleSheet(button_styles["nav"]["normal"])
+        self.btn_next.clicked.connect(self._on_next)
+        nav_layout.addWidget(self.btn_next, 1)
+        
+        right_layout.addLayout(nav_layout)
+        
+        
+        # Wrap sections into containers to control spacing
+        left_container = QWidget()
+        left_container.setLayout(display_layout)
+        middle_container = QWidget()
+        middle_container.setLayout(current_image_layout)
+        middle_container.setMaximumWidth(250)
+        right_container = QWidget()
+        right_container.setLayout(right_layout)
+        right_container.setMaximumWidth(250)
+        
+        # Assemble final layout
+        buttons_layout.addWidget(left_container, 0)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(middle_container, 1)
+        buttons_layout.addSpacing(20)
+        buttons_layout.addWidget(right_container, 1)
+
+        return buttons_layout
+    
     def _create_edit_toolbar(self) -> QVBoxLayout:
         """Create edit toolbar with tools and controls"""
         toolbar_layout = QVBoxLayout()
@@ -599,6 +759,39 @@ class SegmentationWidget(BaseWidget):
         self._on_finished(True)
         self.btn_segment.setStyleSheet(self.button_styles["segment"]["finished"])
     
+    # TODO: Fix Single Image Segmentation
+    def _on_segment_current_image(self):
+        """Segment only the currently displayed image"""
+        if not self.image_path:
+            self.status_text.emit("No image loaded")
+            return
+        
+        self.status_text.emit(f"Segmenting {self.image_path.name}...")
+        self.btn_segment_current.setEnabled(False)
+        self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
+        
+        try:
+            qc_result = self.db_manager.get_qc_result(self.image_path.name)
+            # success = self.seg_step.process_and_save_to_db(
+            #     str(self.image_path),
+            #     qc_result.id
+            # )
+            
+            # self.status_text.emit(f"{self.image_path.name}: {'✓' if success else '✗'}")
+            # if success:
+            #     self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
+            # else:
+            #     self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+        
+        except Exception as e:
+            self.status_text.emit(f"Error: {str(e)}")
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+        
+        finally:
+            self.btn_segment_current.setEnabled(True)
+            # Reload image to show updated segmentation
+            self._display_new_image()
+    
     def _on_progress(self, progress: int, message: str):
         """Handle progress"""
         self.progress_bar.setValue(progress)
@@ -615,6 +808,7 @@ class SegmentationWidget(BaseWidget):
         if self.edit_mode:
             # Exit edit mode
             self.edit_mode = False
+            self.canvas.set_edit_mode(False)
             self.edit_toolbar_widget.setVisible(False)
             self.main_splitter.setSizes([1000, 0])
             self.btn_edit.setStyleSheet(self.button_styles["segment"]["normal"])
@@ -630,13 +824,13 @@ class SegmentationWidget(BaseWidget):
                 return
             
             self.edit_mode = True
+            self.canvas.set_edit_mode(True)
             self.edit_toolbar_widget.setVisible(True)
             self.main_splitter.setSizes([800, 110])
             self.btn_edit.setStyleSheet(self.button_styles["segment"]["highlighted"])
             self.btn_next.setEnabled(False)
             self.btn_prev.setEnabled(False)
             self.canvas.setDragMode(QGraphicsView.DragMode.NoDrag)
-            # self.canvas._edit_mode = True
 
     def _on_brush_size_changed(self, size: int):
         """Handle brush size slider change"""
