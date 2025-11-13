@@ -1,5 +1,6 @@
-from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QUndoCommand, QColor
+from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QColor
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from frontend.models.edit_commands import BrushStrokeCommand, EraseCommand, ColorSwitchCommand, SmartPaintCommand
 from PySide6.QtCore import Qt, Signal
 import numpy as np
 import cv2
@@ -73,6 +74,8 @@ class OverlayLayer:
         self._undo_stack = QUndoStack()
         self._update_display()
     
+    ############ PROPERTIES ############
+    
     @property
     def pixmap(self) -> QPixmap:
         return self._pixmap
@@ -91,6 +94,35 @@ class OverlayLayer:
             return
         self._channel = value
         self._update_display()
+    
+    ############ GETTER/SETTER ############
+    
+    def get_array(self) -> np.ndarray:
+        """Return the RGB numpy array (synced from QImage)"""
+        self._sync_qimage_to_array()
+        return self._overlay_array
+
+    def get_switch_target_color(self, color_bgr: np.ndarray) -> np.ndarray:
+        """
+        Determine the target color after switch.
+        BGR format: Red=(0,0,255), Blue=(255,0,0)
+        
+        Returns the new color in RGB format
+        """
+        # Check if predominantly red or blue
+        b, g, r = color_bgr[0], color_bgr[1], color_bgr[2]
+        
+        # Red channel is dominant -> switch to blue
+        if r > b:
+            return np.array([255, 0, 0], dtype=np.uint8)  # Blue in BGR
+        # Blue channel is dominant -> switch to red
+        elif b > r:
+            return np.array([0, 0, 255], dtype=np.uint8)  # Red in BGR
+        # Other colors (green or low intensity) -> default to red
+        else:
+            return np.array([0, 0, 255], dtype=np.uint8)  # Red in BGR
+    
+    ############ PUBLIC METHODS ############
     
     def undo(self):
         """Undo last edit"""
@@ -113,6 +145,53 @@ class OverlayLayer:
     def can_redo(self) -> bool:
         """Check if redo is available"""
         return self._undo_stack.canRedo()
+    
+    def perform_color_switch(self, x: int, y: int) -> bool:
+        """
+        Perform flood fill color switch at given coordinates.
+        Red (artery) -> Blue (vein), Blue -> Red, Green/other -> Red
+        
+        Args:
+            x, y: Pixel coordinates in the overlay
+            
+        Returns:
+            True if a switch was performed, False if out of bounds or no color to switch
+        """
+        # Convert QImage to numpy array for flood fill
+        ptr = self._qimage.bits()
+        h, w = self._qimage.height(), self._qimage.width()
+        byte_count = self._qimage.bytesPerLine() * h
+        
+        # Create numpy view of QImage (ARGB32)
+        pixels = np.ndarray((byte_count,), dtype=np.uint8, buffer=ptr)
+        pixels = pixels.reshape((h, w, 4))
+        
+        # Bounds check
+        if x < 0 or x >= w or y < 0 or y >= h:
+            return False
+        
+        # Get color at click position (BGRA format in memory)
+        clicked_color = pixels[int(y), int(x), :3].copy() # BGR
+        
+        # If clicked on transparent (black), no action
+        if np.all(clicked_color == 0):
+            return False
+        
+        # Determine target color based on clicked color
+        # BGR format: Red=(0,0,255), Blue=(255,0,0), Green=(0,255,0)
+        target_color = self.get_switch_target_color(clicked_color)
+        
+        # Create a copy of pixels for flood fill mask
+        # Use only the B and R channels to identify the color region
+        mask = np.zeros((h, w), dtype=np.uint8)
+        self._flood_fill_mask(pixels, mask, int(x), int(y), clicked_color, tolerance=5)
+        
+        # Apply color switch to all masked pixels
+        pixels[mask > 0, :3] = target_color
+        
+        return True
+    
+    ############ PRIVATE METHODS ############
     
     def _array_to_qimage(self, rgb_array: np.ndarray) -> QImage:
         """Convert RGB numpy array to ARGB32 QImage"""
@@ -212,6 +291,52 @@ class OverlayLayer:
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
         painter.end()
     
+    def _draw_smart_paint_segment(self, points, radius: int):
+        """
+        Draw a smart paint segment: paint over existing vessels only.
+        Only non-black pixels under the brush stroke are painted with the target color.
+        """
+        # Determine target color based on channel (avoid repeated if checks)
+        color_map = {
+            'both': (255, 255),      # Magenta: B=255, R=255
+            'arteries': (0, 255),    # Red: B=0, R=255
+            'veins': (255, 0)        # Blue: B=255, R=0
+        }
+        
+        if self.channel not in color_map:
+            return
+        
+        b_val, r_val, _ = color_map[self.channel]
+        
+        # Get overlay pixels directly (avoid creating temp QImage)
+        overlay_ptr = self._qimage.bits()
+        h, w = self._qimage.height(), self._qimage.width()
+        overlay_pixels = np.ndarray((h, w, 4), dtype=np.uint8, buffer=overlay_ptr)
+        
+        # Use Qt's built-in rasterization instead of creating a separate QImage
+        # Draw stroke directly to a numpy mask in one pass
+        mask = np.zeros((h, w), dtype=np.uint8)
+        
+        # Vectorized line rasterization using Bresenham-like approach
+        x0, y0 = int(points[0][0]), int(points[0][1])
+        x1, y1 = int(points[1][0]), int(points[1][1])
+        
+        # Use cv2 for efficient line drawing (already imported)
+        cv2.line(mask, (x0, y0), (x1, y1), 255, int(2 * radius), cv2.LINE_AA)
+        
+        # Create combined mask: stroke AND non-black pixels
+        non_black = np.bitwise_or(np.bitwise_or(overlay_pixels[:, :, 0] > 0, overlay_pixels[:, :, 1] > 0),
+                                  overlay_pixels[:, :, 2] > 0)
+        paint_area = (mask > 0) & non_black
+        
+        # Apply color in one vectorized operation
+        overlay_pixels[paint_area, 0] = b_val
+        overlay_pixels[paint_area, 2] = r_val
+            
+        
+        # Update alpha channel only for modified pixels (batch operation)
+        overlay_pixels[paint_area, 3] = 255
+    
     def _sync_qimage_to_array(self):
         """Convert QImage back to RGB numpy array for data persistence"""
         ptr = self._qimage.bits()
@@ -223,82 +348,59 @@ class OverlayLayer:
         
         # Extract RGB channels and update numpy array
         self._overlay_array[:, :, 0:3] = argb[:, :, 0:3]
-
-    def get_array(self) -> np.ndarray:
-        """Return the RGB numpy array (synced from QImage)"""
-        self._sync_qimage_to_array()
-        return self._overlay_array
-
-
-class BrushStrokeCommand(QUndoCommand):
-    """Undo command for brush stroke operations"""
-    
-    def __init__(self, overlay_layer: OverlayLayer, temp_qimage: QImage, points: list, channel: str, radius: int, description: str = "Brush Stroke"):
-        super().__init__(description)
-        self.overlay_layer = overlay_layer  # Store reference to overlay layer
-        self.points = points
-        self.channel = channel
-        self.radius = radius
-        self.image_before = temp_qimage
-    
-    def redo(self):
-        """Reapply the brush stroke"""
-        painter = QPainter(self.overlay_layer._qimage)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+          
+    def _flood_fill_mask(self, pixels: np.ndarray, mask: np.ndarray, 
+                         x: int, y: int, target_color: np.ndarray, tolerance: int = 5):
+        """
+        BFS flood fill to mark all connected pixels of similar color.
         
-        pen = painter.pen()
-        pen.setWidth(2 * self.radius)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        if self.channel == "arteries":
-            pen.setColor(Qt.GlobalColor.red)
-        elif self.channel == "veins":
-            pen.setColor(Qt.GlobalColor.blue)
-        elif self.channel == "both":
-            pen.setColor(QColor(255, 0, 255))
-        painter.setPen(pen)
+        Args:
+            pixels: ARGB32 pixel array (H, W, 4)
+            mask: Output mask to mark filled pixels
+            x, y: Starting coordinates
+            target_color: BGR color to match
+            tolerance: Color tolerance for matching
+        """
+        h, w = pixels.shape[:2]
+        visited = np.zeros((h, w), dtype=bool)
+        queue = [(x, y)]
+        visited[y, x] = True
         
-        for i in range(len(self.points) - 1):
-            painter.drawLine(int(self.points[i][0]), int(self.points[i][1]), 
-                           int(self.points[i+1][0]), int(self.points[i+1][1]))
-        painter.end()
-    
-    def undo(self):
-        """Restore image to state before brush stroke"""
-        self.overlay_layer._qimage.swap(self.image_before)
-
-
-class EraseCommand(QUndoCommand):
-    """Undo command for erase operations"""
-    
-    def __init__(self, overlay_layer: OverlayLayer, temp_qimage: QImage, points: list, radius: int, description: str = "Erase"):
-        super().__init__(description)
-        self.overlay_layer = overlay_layer  # Store reference to overlay layer
-        self.points = points
-        self.radius = radius
-        self.image_before = temp_qimage
-    
-    def redo(self):
-        """Reapply the erase operation"""
-        painter = QPainter(self.overlay_layer._qimage)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        while queue:
+            cx, cy = queue.pop(0)
+            
+            # Check if current pixel matches target color (within tolerance)
+            if self._color_matches(pixels[cy, cx, :3], target_color, tolerance):
+                mask[cy, cx] = 1
+                
+                # Add neighbors to queue
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < w and 0 <= ny < h and not visited[ny, nx]:
+                        visited[ny, nx] = True
+                        queue.append((nx, ny))
+                        
+    def _color_matches(self, color1_bgr: np.ndarray, color2_bgr: np.ndarray, tolerance: int = 0) -> np.bool | bool:
+        """
+        Check if two colors are similar within tolerance.
         
-        pen = painter.pen()
-        pen.setWidth(2 * self.radius)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
+        Args:
+            color1_bgr, color2_bgr: Colors in BGR format
+            tolerance: Maximum difference per channel
+        """
+        # Skip fully transparent pixels
+        if np.all(color1_bgr == 0):
+            return False
         
-        for i in range(len(self.points) - 1):
-            painter.drawLine(int(self.points[i][0]), int(self.points[i][1]), 
-                           int(self.points[i+1][0]), int(self.points[i+1][1]))
-        painter.end()
+        diff = np.abs(color1_bgr.astype(int) - color2_bgr.astype(int))
+        return np.all(diff <= tolerance)
     
-    def undo(self):
-        """Restore image to state before erase"""
-        self.overlay_layer._qimage.swap(self.image_before)
-
+    def _update_qimage_after_edit(self):
+        """Update internal state after direct pixel manipulation"""
+        # Force QImage to recognize changes
+        self._qimage = self._array_to_qimage(self.get_array())
+        self._update_display()
+    
 
 class Canvas(QGraphicsView):
     """Main canvas for displaying and editing image layers"""
@@ -354,9 +456,9 @@ class Canvas(QGraphicsView):
         return self.overlay_layer.channel
     
     def set_tool(self, tool: str):
-        """Set the current tool: 'brush' or 'eraser'"""
+        """Set the current tool: 'brush', 'smart_paint', 'eraser' or 'change'"""
         self.current_tool = tool
-        if tool and tool.lower() == 'brush':
+        if tool and tool.lower() in ['brush', 'smart_paint']:
             self.set_brush_channel(self.get_overlay_channel())
 
     def set_brush_channel(self, channel: str):
@@ -464,11 +566,19 @@ class Canvas(QGraphicsView):
             super().mousePressEvent(event)
             return
 
-        pos = self.mapToScene(event.position().toPoint())
-        self.stroke_points = [(pos.x(), pos.y())]
-        
         # Store temporary qimage prior to stroke for undo
         self._temp_overlay_qimage = self.overlay_layer._qimage.copy()
+        pos = self.mapToScene(event.position().toPoint())
+        
+        # Handle color switch tool (single click, no stroke)
+        if self.current_tool == "change":
+            command = ColorSwitchCommand(self.overlay_layer, self._temp_overlay_qimage, 
+                                        int(pos.x()), int(pos.y()))
+            self.overlay_layer._undo_stack.push(command)
+            self.update_overlay_display()
+            return
+        
+        self.stroke_points = [(pos.x(), pos.y())]
 
     def mouseMoveEvent(self, event):
         """Add points to current stroke"""
@@ -483,6 +593,8 @@ class Canvas(QGraphicsView):
             segment = self.stroke_points[-2:]
             if self.current_tool == "brush" and self.overlay_layer.channel != 'none':
                 self.overlay_layer._draw_brush_segment(segment, self.brush_radius)
+            elif self.current_tool == "smart_paint" and self.overlay_layer.channel != 'none':
+                self.overlay_layer._draw_smart_paint_segment(segment, self.brush_radius)
             elif self.current_tool == "eraser" and self.overlay_layer.channel == 'both':
                 self.overlay_layer._draw_erase_segment(segment, self.brush_radius)
             self.update_overlay_display()
@@ -496,6 +608,11 @@ class Canvas(QGraphicsView):
         # Push entire stroke to undo stack once
         if self.current_tool == "brush" and self.overlay_layer.channel != 'none':
             command = BrushStrokeCommand(self.overlay_layer, self._temp_overlay_qimage, 
+                                         self.stroke_points, self.overlay_layer.channel, 
+                                         self.brush_radius)
+            self.overlay_layer._undo_stack.push(command)
+        elif self.current_tool == "smart_paint" and self.overlay_layer.channel != 'none':
+            command = SmartPaintCommand(self.overlay_layer, self._temp_overlay_qimage, 
                                          self.stroke_points, self.overlay_layer.channel, 
                                          self.brush_radius)
             self.overlay_layer._undo_stack.push(command)

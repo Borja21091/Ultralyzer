@@ -79,10 +79,15 @@ class SegmentationWidget(BaseWidget):
             # Select tool
             self._active_tool = tool
             self.btn_brush.setChecked(tool == "brush")
+            self.btn_smart_paint.setChecked(tool == "smart_paint")
             self.btn_eraser.setChecked(tool == "eraser")
+            self.btn_change.setChecked(tool == "change")
             self.canvas.set_tool(tool)
-            cursor = self._create_brush_cursor(self.brush_size // 2)
-            self.canvas.setCursor(cursor)
+            if tool in ["brush", "smart_paint", "eraser"]:
+                cursor = self._create_brush_cursor(self.brush_size // 2)
+                self.canvas.setCursor(cursor)
+            else:
+                self.canvas.setCursor(Qt.CursorShape.CrossCursor)
 
     @property
     def channel(self) -> str:
@@ -275,6 +280,14 @@ class SegmentationWidget(BaseWidget):
         self.btn_brush.clicked.connect(lambda: self._set_active_tool("brush"))
         toolbar_layout.addWidget(self.btn_brush)
         
+        # Smart Paint tool
+        self.btn_smart_paint = QPushButton("✨")
+        self.btn_smart_paint.setToolTip("Smart Paint - Paint over existing vessels (Ctrl/Cmd+Shift+B)")
+        self.btn_smart_paint.setMaximumWidth(80)
+        self.btn_smart_paint.setCheckable(True)
+        self.btn_smart_paint.clicked.connect(lambda: self._set_active_tool("smart_paint"))
+        toolbar_layout.addWidget(self.btn_smart_paint)
+        
         # Eraser tool
         self.btn_eraser = QPushButton("🧹")
         self.btn_eraser.setToolTip("Eraser - Remove from mask (Ctrl/Cmd+E)")
@@ -282,6 +295,14 @@ class SegmentationWidget(BaseWidget):
         self.btn_eraser.setCheckable(True)
         self.btn_eraser.clicked.connect(lambda: self._set_active_tool("eraser"))
         toolbar_layout.addWidget(self.btn_eraser)
+        
+        # Color change tool
+        self.btn_change = QPushButton("⇄")
+        self.btn_change.setToolTip("Change Color - Switch artery/vein (Ctrl/Cmd+C)")
+        self.btn_change.setMaximumWidth(80)
+        self.btn_change.setCheckable(True)
+        self.btn_change.clicked.connect(lambda: self._set_active_tool("change"))
+        toolbar_layout.addWidget(self.btn_change)
         
         toolbar_layout.addSpacing(10)
         
@@ -373,8 +394,12 @@ class SegmentationWidget(BaseWidget):
         sc_redo.activated.connect(self._on_redo)
         sc_brush = QShortcut(QKeySequence("Ctrl+B"), self)
         sc_brush.activated.connect(lambda: self._set_active_tool("brush"))
+        sc_smart_paint = QShortcut(QKeySequence("Ctrl+Shift+B"), self)
+        sc_smart_paint.activated.connect(lambda: self._set_active_tool("smart_paint"))
         sc_eraser = QShortcut(QKeySequence("Ctrl+E"), self)
         sc_eraser.activated.connect(lambda: self._set_active_tool("eraser"))
+        sc_change = QShortcut(QKeySequence("Ctrl+C"), self)
+        sc_change.activated.connect(lambda: self._set_active_tool("change"))
         
         # Brush size shortcuts
         sc_plus = QShortcut(QKeySequence(Qt.Key_Plus), self)
@@ -401,8 +426,10 @@ class SegmentationWidget(BaseWidget):
     def _set_active_tool(self, tool: str):
         """Wrapper for active tool property setter"""
         self.active_tool = tool
-        if tool in ["brush", "eraser"]:
+        if tool in ["brush", "smart_paint", "eraser"]:
             self._update_brush_cursor()
+        elif tool == "change":
+            self.canvas.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
 
@@ -491,7 +518,7 @@ class SegmentationWidget(BaseWidget):
     
     def _update_brush_cursor(self):
         """Update brush cursor based on current zoom and brush size"""
-        if self._active_tool in ["brush", "eraser"] and self.canvas:
+        if self._active_tool in ["brush", "smart_paint", "eraser"] and self.canvas:
             # Scale brush radius by canvas zoom level
             scaled_radius = (self.brush_size / 2) * self.canvas._zoom_level
             cursor = self._create_brush_cursor(scaled_radius)
