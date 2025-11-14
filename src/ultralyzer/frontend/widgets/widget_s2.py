@@ -5,33 +5,97 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QGraphicsView, 
     QProgressBar, QComboBox, QSlider, QSplitter, 
-    QLabel, QMessageBox, QWidget
+    QLabel, QMessageBox, QWidget, QTextEdit
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread
 from backend.models.segmentor import Segmentor
 from PySide6.QtGui import QShortcut, QKeySequence, QCursor, QPixmap, QPainter
 from frontend.widgets.widget_base import BaseWidget
 from backend.models.database import DatabaseManager
-from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP
+from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
 from backend.steps.s2_segmentation import SegmentationStep
 from frontend.widgets.canvas import Canvas, ImageLayer, OverlayLayer
 
 from backend.models.segmentor import VesselSegmentor
 
 
+class BatchSegmentationWorker(QThread):
+    """Worker thread for batch segmentation"""
+    
+    progress = Signal(int, str)
+    finished = Signal(bool)
+    
+    def __init__(self, step_seg: SegmentationStep, metadata: list):
+        super().__init__()
+        self.step_seg = step_seg
+        self.metadata = metadata
+    
+    def run(self):
+        """Run segmentation batch"""
+        total = len(self.metadata)
+        
+        for idx, meta in enumerate(self.metadata):
+            try:
+                image_path = Path(meta.folder) / Path(meta.name)
+                success = self.step_seg.process_and_save_to_db(
+                    str(image_path),
+                    meta.id
+                )
+                
+                progress_pct = int((idx + 1) / total * 100)
+                msg = f"{meta.name}: {'✓' if success else '✗'}"
+                self.progress.emit(progress_pct, msg)
+            
+            except Exception as e:
+                progress_pct = int((idx + 1) / total * 100)
+                self.progress.emit(progress_pct, f"Error: {str(e)}")
+        
+        self.finished.emit(True)
+
+
+class SingleSegmentationWorker(QThread):
+    """Worker thread for single image segmentation"""
+    
+    finished = Signal(bool)
+    
+    def __init__(self, step_seg: SegmentationStep, image_path: Path, id: int):
+        super().__init__()
+        self.step_seg = step_seg
+        self.image_path = image_path
+        self.id = id
+        
+    def run(self):
+        """Run segmentation for a single image"""
+        try:
+            success = self.step_seg.process_and_save_to_db(
+                str(self.image_path),
+                self.id
+            )
+            self.finished.emit(success)
+        except Exception as e:
+            self.finished.emit(False)
+
+
 class SegmentationWidget(BaseWidget):
     """Interactive segmentation, visualization and correction widget"""
     
     status_text = Signal(str)
+    decision_made = Signal(str, str) # filename, decision
     
     def __init__(self, segmentor: Segmentor, db_manager: DatabaseManager = None):
         super().__init__(db_manager)
         self.step_seg = SegmentationStep(segmentor, db_manager=self.db_manager)
         # vessel_segmentor = VesselSegmentor()
-        # self.seg_step = SegmentationStep(segmentor, vessel_segmentor, self.db_manager)
+        # self.step_seg = SegmentationStep(segmentor, vessel_segmentor, self.db_manager)
+        
+        # Track segmentation worker thread to prevent garbage collection
+        self._worker_thread = None
         
         # Overlay opacity
         self._overlay_opacity = 0.75
+        
+        # QC state
+        self.state = BLANK_STATE.copy()
         
         # Edit mode state
         self._edit_mode = False
@@ -47,6 +111,16 @@ class SegmentationWidget(BaseWidget):
         self._init_ui()
     
     ############ PROPERTIES ############
+    
+    @property
+    def state(self) -> dict:
+        """Get current widget state"""
+        return self._state
+
+    @state.setter
+    def state(self, value: dict):
+        """Set current widget state"""
+        self._state = value
     
     @property
     def edit_mode(self) -> bool:
@@ -197,127 +271,6 @@ class SegmentationWidget(BaseWidget):
         # Shortcuts
         self._setup_shortcuts()
 
-    def _create_bottom_section_original(self) -> QHBoxLayout:
-        """Create segmentation button layout with three sections: Display | Current Image | Segment All + Nav"""
-        buttons_layout = QHBoxLayout()
-        button_styles = self.button_styles
-
-        # LEFT SECTION: Display Controls (vertical channel/overlay + vertical opacity slider)
-        display_layout = QHBoxLayout()
-        
-        # Combobox section (vertical stacking)
-        combo_layout = QVBoxLayout()
-        
-        # Channel selector with label
-        channel_label = QLabel("Channel:")
-        channel_label.setMaximumWidth(70)
-        self.channel_combo = QComboBox()
-        self.channel_combo.setMinimumWidth(100)
-        self.channel_combo.setMaximumWidth(200)
-        self.channel_combo.setToolTip("Display Channel")
-        self.channel_combo.addItems(["Color", "Red", "Green", "Blue"])
-        self.channel_combo.setCurrentText("Color")
-        self.channel_combo.currentTextChanged.connect(self._on_image_channel_changed)
-        combo_layout.addWidget(channel_label)
-        combo_layout.addWidget(self.channel_combo)
-        
-        # Segmentation overlay selector with label
-        overlay_label = QLabel("Overlay:")
-        overlay_label.setMaximumWidth(70)
-        self.overlay_combo = QComboBox()
-        self.overlay_combo.setMinimumWidth(100)
-        self.overlay_combo.setMaximumWidth(200)
-        self.overlay_combo.setToolTip("Segmentation Overlay")
-        self.overlay_combo.addItems(["Arteries", "Veins", "Both", "None"])
-        self.overlay_combo.setCurrentText("Both")
-        self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
-        combo_layout.addWidget(overlay_label)
-        combo_layout.addWidget(self.overlay_combo)
-        
-        display_layout.addLayout(combo_layout)
-        display_layout.addSpacing(15)
-        
-        # Opacity slider section (vertical)
-        opacity_layout = QVBoxLayout()
-        opacity_label = QLabel("Opacity:")
-        opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        opacity_layout.addWidget(opacity_label)
-        
-        self.opacity_slider = QSlider(Qt.Vertical)
-        self.opacity_slider.setMinimum(0)
-        self.opacity_slider.setMaximum(100)
-        self.opacity_slider.setValue(75)
-        self.opacity_slider.setMaximumHeight(100)
-        self.opacity_slider.setToolTip("Adjust overlay opacity")
-        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
-        opacity_layout.addWidget(self.opacity_slider, alignment=Qt.AlignmentFlag.AlignHCenter)
-        
-        self.opacity_label = QLabel("75%")
-        self.opacity_label.setMaximumWidth(35)
-        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        opacity_layout.addWidget(self.opacity_label)
-        
-        display_layout.addLayout(opacity_layout)
-        
-        buttons_layout.addLayout(display_layout, 0)
-        buttons_layout.addStretch()
-        
-        # MIDDLE SECTION: Current Image Actions (vertical stacking)
-        current_image_layout = QVBoxLayout()
-        
-        self.btn_segment_current = QPushButton("⏩ Segment Current")
-        self.btn_segment_current.setMaximumWidth(200)
-        self.btn_segment_current.setMinimumHeight(40)
-        self.btn_segment_current.setStyleSheet(button_styles["segment"]["normal"])
-        self.btn_segment_current.clicked.connect(self._on_segment_current_image)
-        current_image_layout.addWidget(self.btn_segment_current)
-        
-        self.btn_edit = QPushButton("✏️ Edit Mask")
-        self.btn_edit.setMaximumWidth(200)
-        self.btn_edit.setMinimumHeight(40)
-        self.btn_edit.setStyleSheet(button_styles["segment"]["normal"])
-        self.btn_edit.clicked.connect(self._on_edit_mode_toggle)
-        current_image_layout.addWidget(self.btn_edit)
-        
-        buttons_layout.addLayout(current_image_layout, 0)
-        buttons_layout.addSpacing(50)
-        
-        # RIGHT SECTION: Segment All (top) + Navigation (bottom)
-        right_layout = QVBoxLayout()
-        right_layout.addSpacing(10)
-        
-        self.btn_segment = QPushButton("⏩ Segment All")
-        self.btn_segment.setMaximumWidth(200)
-        self.btn_segment.setMinimumHeight(40)
-        self.btn_segment.setStyleSheet(button_styles["segment"]["normal"])
-        self.btn_segment.clicked.connect(self._on_start_segmentation)
-        right_layout.addWidget(self.btn_segment)
-        
-        # Navigation buttons (horizontal)
-        nav_layout = QHBoxLayout()
-        
-        self.btn_prev = QPushButton("◀ Previous")
-        self.btn_prev.setMaximumWidth(100)
-        self.btn_prev.setMinimumHeight(40)
-        self.btn_prev.setStyleSheet(button_styles["nav"]["normal"])
-        self.btn_prev.clicked.connect(self._on_prev)
-        nav_layout.addWidget(self.btn_prev)
-        
-        self.btn_next = QPushButton("Next ▶")
-        self.btn_next.setMaximumWidth(100)
-        self.btn_next.setMinimumHeight(40)
-        self.btn_next.setStyleSheet(button_styles["nav"]["normal"])
-        self.btn_next.clicked.connect(self._on_next)
-        nav_layout.addWidget(self.btn_next)
-        
-        nav_layout.addSpacing(10)
-        right_layout.addLayout(nav_layout)
-        right_layout.addSpacing(5)
-        
-        buttons_layout.addLayout(right_layout, 0)
-
-        return buttons_layout
-    
     def _create_bottom_section(self) -> QHBoxLayout:
         """Create segmentation button layout with three sections: Display | Current Image | Segment All + Nav"""
         buttons_layout = QHBoxLayout()
@@ -329,6 +282,12 @@ class SegmentationWidget(BaseWidget):
         # Combobox section (vertical stacking)
         combo_layout = QVBoxLayout()
         
+        # Refresh display button
+        self.btn_refresh_display = QPushButton("🔄 Refresh Display")
+        self.btn_refresh_display.setMinimumHeight(30)
+        self.btn_refresh_display.clicked.connect(self._on_refresh_display)
+        combo_layout.addWidget(self.btn_refresh_display)
+        
         # Channel selector with label
         channel_label = QLabel("Channel:")
         channel_label.setMaximumWidth(70)
@@ -380,7 +339,54 @@ class SegmentationWidget(BaseWidget):
         
         display_layout.addLayout(opacity_layout)
         
-        # MIDDLE SECTION: Current Image Actions (vertical stacking)
+        # MIDDLE_LEFT SECTION: Image Quality Controls (vertical decision + vertical notes)
+        quality_layout = QHBoxLayout()
+        quality_layout.setContentsMargins(0, 0, 0, 0)
+        quality_layout.setSpacing(5)
+        
+        # Decision buttons (vertical stacking)
+        decision_buttons_layout = QVBoxLayout()
+        decision_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        decision_buttons_layout.setSpacing(5)
+        
+        # Reject button
+        self.btn_reject = QPushButton("❌ REJECT")
+        self.btn_reject.setMaximumWidth(200)
+        self.btn_reject.setMinimumHeight(40)
+        self.btn_reject.setStyleSheet(button_styles["reject"]["normal"])
+        self.btn_reject.clicked.connect(lambda: self._on_qc_decision("reject"))
+        decision_buttons_layout.addWidget(self.btn_reject)
+        
+        # Borderline button
+        self.btn_borderline = QPushButton("⚠️ BORDERLINE")
+        self.btn_borderline.setMaximumWidth(200)
+        self.btn_borderline.setMinimumHeight(40)
+        self.btn_borderline.setStyleSheet(button_styles["borderline"]["normal"])
+        self.btn_borderline.clicked.connect(lambda: self._on_qc_decision("borderline"))
+        decision_buttons_layout.addWidget(self.btn_borderline)
+        
+        # Pass button
+        self.btn_pass = QPushButton("✅ PASS")
+        self.btn_pass.setMaximumWidth(200)
+        self.btn_pass.setMinimumHeight(40)
+        self.btn_pass.setStyleSheet(button_styles["pass"]["normal"])
+        self.btn_pass.clicked.connect(lambda: self._on_qc_decision("pass"))
+        decision_buttons_layout.addWidget(self.btn_pass)
+        
+        quality_layout.addLayout(decision_buttons_layout)
+        
+        # Notes section (vertical)
+        notes_layout = QVBoxLayout()
+        notes_layout.setContentsMargins(0, 0, 0, 0)
+        notes_layout.setSpacing(5)
+        
+        notes_layout.addWidget(QLabel("Notes (optional):"))
+        self.notes_text = QTextEdit()
+        self.notes_text.setPlaceholderText("Add any observations about the image...")
+        notes_layout.addWidget(self.notes_text)
+        quality_layout.addLayout(notes_layout, 9)
+        
+        # MIDDLE_RIGHT SECTION: Current Image Actions (vertical stacking)
         current_image_layout = QVBoxLayout()
         current_image_layout.setContentsMargins(0, 0, 0, 0)
         current_image_layout.setSpacing(5)
@@ -402,11 +408,11 @@ class SegmentationWidget(BaseWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(5)
         
-        self.btn_segment = QPushButton("⏩ Segment All")
-        self.btn_segment.setMinimumHeight(40)
-        self.btn_segment.setStyleSheet(button_styles["segment"]["normal"])
-        self.btn_segment.clicked.connect(self._on_start_segmentation)
-        right_layout.addWidget(self.btn_segment)
+        self.btn_segment_all = QPushButton("⏩ Segment All")
+        self.btn_segment_all.setMinimumHeight(40)
+        self.btn_segment_all.setStyleSheet(button_styles["segment"]["normal"])
+        self.btn_segment_all.clicked.connect(self._on_start_segmentation)
+        right_layout.addWidget(self.btn_segment_all)
         
         # Navigation buttons (horizontal - same width, dynamic sizing)
         nav_layout = QHBoxLayout()
@@ -431,9 +437,11 @@ class SegmentationWidget(BaseWidget):
         # Wrap sections into containers to control spacing
         left_container = QWidget()
         left_container.setLayout(display_layout)
-        middle_container = QWidget()
-        middle_container.setLayout(current_image_layout)
-        middle_container.setMaximumWidth(250)
+        middle_left_container = QWidget()
+        middle_left_container.setLayout(quality_layout)
+        middle_right_container = QWidget()
+        middle_right_container.setLayout(current_image_layout)
+        middle_right_container.setMaximumWidth(250)
         right_container = QWidget()
         right_container.setLayout(right_layout)
         right_container.setMaximumWidth(250)
@@ -441,7 +449,9 @@ class SegmentationWidget(BaseWidget):
         # Assemble final layout
         buttons_layout.addWidget(left_container, 0)
         buttons_layout.addStretch()
-        buttons_layout.addWidget(middle_container, 1)
+        buttons_layout.addWidget(middle_left_container, 5)
+        buttons_layout.addSpacing(20)
+        buttons_layout.addWidget(middle_right_container, 1)
         buttons_layout.addSpacing(20)
         buttons_layout.addWidget(right_container, 1)
 
@@ -625,6 +635,11 @@ class SegmentationWidget(BaseWidget):
         image_path = self.image_path
         name = image_path.name
         
+        # Load notes if any
+        qc_result = self.db_manager.get_qc_result(name)
+        if qc_result:
+            self.notes_text.setPlainText(qc_result.notes)
+        
         # Load image
         image = cv2.cvtColor(cv2.imread(str(image_path)), cv2.COLOR_BGR2RGB)
         image_layer = ImageLayer(image)
@@ -653,8 +668,11 @@ class SegmentationWidget(BaseWidget):
         self.canvas.signal_zoom_changed.connect(self._update_brush_cursor)
         
         # Set canvas edge color
-        qc_decision = self.db_manager.get_qc_result(name).decision.value
-        self.canvas_color = qc_decision
+        try:
+            qc_decision = self.db_manager.get_qc_result(name).decision.value
+            self.canvas_color = qc_decision
+        except Exception:
+            self.canvas_color = "default"
         
         # Center the image on the canvas
         self.canvas.centerOn(self.canvas.scene.itemsBoundingRect().center()) # Move to center
@@ -664,6 +682,25 @@ class SegmentationWidget(BaseWidget):
         self.canvas.set_image_channel(self.channel)
         self.canvas.set_overlay_channel(self.overlay)
 
+    def _highlight_decision(self, decision: str):
+        """Highlight decision button"""
+        self._clear_decision_highlight()
+        button_styles = self.button_styles
+        
+        if decision == "pass":
+            self.btn_pass.setStyleSheet(button_styles["pass"]["highlighted"])
+        elif decision == "borderline":
+            self.btn_borderline.setStyleSheet(button_styles["borderline"]["highlighted"])
+        elif decision == "reject":
+            self.btn_reject.setStyleSheet(button_styles["reject"]["highlighted"])
+    
+    def _clear_decision_highlight(self):
+        """Clear all decision highlights"""
+        button_styles = self.button_styles
+        self.btn_pass.setStyleSheet(button_styles["pass"]["normal"])
+        self.btn_borderline.setStyleSheet(button_styles["borderline"]["normal"])
+        self.btn_reject.setStyleSheet(button_styles["reject"]["normal"])
+    
     def _prompt_save_changes(self):
         """Prompt user to save unsaved edits"""
         reply = QMessageBox.question(
@@ -698,6 +735,16 @@ class SegmentationWidget(BaseWidget):
         cursor = QCursor(cursor_pixmap)
         return cursor
     
+    def _reset_buttons_state(self):
+        """Reset button styles to default"""
+        # QC decision buttons
+        self._clear_decision_highlight()
+        self.notes_text.clear()
+        
+        # Segmentation buttons
+        self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["normal"])
+        self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+    
     def _update_brush_cursor(self):
         """Update brush cursor based on current zoom and brush size"""
         if self._active_tool in ["brush", "smart_paint", "eraser"] and self.canvas:
@@ -706,7 +753,45 @@ class SegmentationWidget(BaseWidget):
             cursor = self._create_brush_cursor(scaled_radius)
             self.canvas.setCursor(cursor)
         
+    def _save_state(self):
+        """Save current image's QC data"""
+        if not self.image_paths:
+            return
+
+        self.state['notes'] = self.notes_text.toPlainText()
+
+        try:
+            state = self.state
+            self.db_manager.save_qc_result(
+                state['filename'],
+                state['decision'],
+                state['notes']
+                )
+        except Exception as e:
+            print(f"Error saving QC result: {e}")
+            return False
+        return True
+        
     ############ ACTIONS ############
+    
+    def _on_qc_decision(self, decision: str):
+        """Handle decision"""
+        if not self.image_paths:
+            return
+        
+        notes = self.notes_text.toPlainText()
+        
+        self._highlight_decision(decision)
+        self.canvas_color = decision
+
+        # Update state
+        self.state['filename'] = self.image_path.name
+        self.state['decision'] = decision
+        self.state['notes'] = notes
+
+        # Save to database & emit signal
+        if self._save_state():
+            self.decision_made.emit(self.state['filename'], decision)
     
     def _on_next(self):
         """Move to next image"""
@@ -714,6 +799,7 @@ class SegmentationWidget(BaseWidget):
             self._prompt_save_changes()
         
         if self.next_image():
+            self._reset_buttons_state()
             self.display_image()
     
     def _on_prev(self):
@@ -722,18 +808,23 @@ class SegmentationWidget(BaseWidget):
             self._prompt_save_changes()
         
         if self.previous_image():
+            self._reset_buttons_state()
             self.display_image()
     
-    def _on_start_segmentation(self):
+    def _on_refresh_display(self):
+        """Refresh image display"""
+        self._display_new_image()
+    
+    def _on_start_segmentation_original(self):
         """Start segmentation on main thread"""
-        pending = self.seg_step.get_pending_images()
+        pending = self.step_seg.get_pending_images()
         if not pending:
             self.status_text.emit("No images to segment")
             return
 
         self.status_text.emit(f"Segmenting {len(pending)} images...")
-        self.btn_segment.setEnabled(False)
-        self.btn_segment.setStyleSheet(self.button_styles["segment"]["highlighted"])
+        self.btn_segment_all.setEnabled(False)
+        self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["highlighted"])
         
         total = len(pending)
         
@@ -743,7 +834,7 @@ class SegmentationWidget(BaseWidget):
                 id = qc_result.id
                 path = self.db_manager.get_image_path(name)
                 
-                success = self.seg_step.process_and_save_to_db(
+                success = self.step_seg.process_and_save_to_db(
                     str(path),
                     id
                 )
@@ -757,9 +848,57 @@ class SegmentationWidget(BaseWidget):
                 self._on_progress(progress_pct, f"Error: {str(e)}")
         
         self._on_finished(True)
-        self.btn_segment.setStyleSheet(self.button_styles["segment"]["finished"])
+        self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["finished"])
     
-    # TODO: Fix Single Image Segmentation
+    def _on_start_segmentation(self):
+        """Start segmentation"""
+        pending = self.step_seg.get_pending_images()
+        
+        if not pending:
+            self.status_text.emit(("No images to segment"))
+            return
+        
+        self.status_text.emit(f"Segmenting {len(pending)} images...")
+        self.btn_segment_all.setEnabled(False)
+        
+        self.worker_thread = BatchSegmentationWorker(self.step_seg, pending)
+        self.worker_thread.progress.connect(self._on_progress)
+        self.worker_thread.finished.connect(self._on_finished)
+        self.worker_thread.finished.connect(self._on_worker_finished)
+        self.worker_thread.start()
+    
+    def _on_segment_current_image_original(self):
+        """Segment only the currently displayed image"""
+        if not self.image_path:
+            self.status_text.emit("No image loaded")
+            return
+        
+        self.status_text.emit(f"Segmenting {self.image_path.name}...")
+        self.btn_segment_current.setEnabled(False)
+        self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
+        
+        try:
+            qc_result = self.db_manager.get_qc_result(self.image_path.name)
+            success = self.step_seg.process_and_save_to_db(
+                str(self.image_path),
+                qc_result.id
+            )
+            
+            self.status_text.emit(f"{self.image_path.name}: {'✓' if success else '✗'}")
+            if success:
+                self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
+            else:
+                self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+        
+        except Exception as e:
+            self.status_text.emit(f"Error: {str(e)}")
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+        
+        finally:
+            self.btn_segment_current.setEnabled(True)
+            # Reload image to show updated segmentation
+            self._display_new_image()
+            
     def _on_segment_current_image(self):
         """Segment only the currently displayed image"""
         if not self.image_path:
@@ -772,16 +911,12 @@ class SegmentationWidget(BaseWidget):
         
         try:
             qc_result = self.db_manager.get_qc_result(self.image_path.name)
-            # success = self.seg_step.process_and_save_to_db(
-            #     str(self.image_path),
-            #     qc_result.id
-            # )
+            self.worker_thread = SingleSegmentationWorker(self.step_seg, self.image_path, qc_result.id)
+            self.worker_thread.finished.connect(self._on_finished)
+            self.worker_thread.finished.connect(self._on_worker_finished)
+            self.worker_thread.start()
             
-            # self.status_text.emit(f"{self.image_path.name}: {'✓' if success else '✗'}")
-            # if success:
-            #     self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
-            # else:
-            #     self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
         
         except Exception as e:
             self.status_text.emit(f"Error: {str(e)}")
@@ -799,7 +934,7 @@ class SegmentationWidget(BaseWidget):
     
     def _on_finished(self, success: bool):
         """Handle completion"""
-        self.btn_segment.setEnabled(True)
+        self.btn_segment_all.setEnabled(True)
         self.status_text.emit("Complete!" if success else "Failed!")
         self.progress_bar.setValue(100 if success else 0)
     
@@ -903,3 +1038,10 @@ class SegmentationWidget(BaseWidget):
         opacity_normalized = value / 100.0
         if self.canvas is not None:
             self.canvas.set_overlay_opacity(opacity_normalized)
+
+    def _on_worker_finished(self):
+        """Clean up worker thread"""
+        if self._worker_thread:
+            self._worker_thread.quit()
+            self._worker_thread.wait()
+            self._worker_thread = None

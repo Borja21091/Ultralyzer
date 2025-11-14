@@ -730,5 +730,6 @@ class Canvas(QGraphicsView):
     def mouseDoubleClickEvent(self, event):
         """Reset zoom to fit view on double click"""
         self.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self._zoom_level = 1.0
+        transform = self.transform()
+        self._zoom_level = transform.m11()
         event.accept()

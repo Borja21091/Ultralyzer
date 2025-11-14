@@ -207,7 +207,7 @@ class QualityControlWidget(BaseWidget):
     
     ############ SUBCLASS METHODS ############
     
-    def save_state(self):
+    def _save_state(self):
         """Save current image's QC data"""
         if not self.image_paths:
             return
@@ -237,7 +237,7 @@ class QualityControlWidget(BaseWidget):
             return
         
         # Save previous data before switching
-        self.save_state()
+        self._save_state()
         self.reset_state()
         
         current_path = self.image_path
@@ -297,7 +297,7 @@ class QualityControlWidget(BaseWidget):
         self.state['notes'] = notes
 
         # Save to database & emit signal
-        if self.save_state():
+        if self._save_state():
             self.decision_made.emit(self.state['filename'], decision)
 
     def _on_next(self):

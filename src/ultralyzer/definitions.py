@@ -19,6 +19,13 @@ SEG_DIR = os.path.join(ROOT_DIR, ".seg")
 # IMAGE FORMATS
 IMAGE_FORMATS = (".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".tif")
 
+# BLANK STATE QUALITY-CONTROL
+BLANK_STATE = {
+    'filename': '', 
+    'decision': None, 
+    'notes': ''
+}
+
 # CANVAS BORDER COLORS
 CANVAS_BORDER_COLORS = {
     "default": "#cccccc",    # Light gray

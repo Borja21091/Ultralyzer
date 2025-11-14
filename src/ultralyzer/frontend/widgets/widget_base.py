@@ -114,7 +114,7 @@ class BaseWidget(QWidget):
 
     ############ PLACEHOLDER METHODS ############
 
-    def save_state(self):
+    def _save_state(self):
         """
         Save current widget state to database.
         

@@ -12,13 +12,6 @@ def main():
         description="Ultralyzer - Retinal Image Processing Pipeline"
     )
     parser.add_argument(
-        "--step", "-s",
-        type=str,
-        default="qc",
-        choices=["qc", "seg"],
-        help="Processing step to run (default: qc)"
-    )
-    parser.add_argument(
         "--folder", "-f",
         type=str,
         default=None,
@@ -31,7 +24,7 @@ def main():
     app = QApplication(sys.argv)
     
     # Create main window with selected step
-    window = MainWindow(step=args.step)
+    window = MainWindow()
     
     # Load folder if provided
     if args.folder:
@@ -41,11 +34,10 @@ def main():
             window.folder_label.setText(f"📂 {folder_path.name}")
             
             # Load images if QC step
-            if args.step == "qc":
-                if window.step_widget.load_images(folder_path):
-                    window.statusBar().showMessage(
-                        f"Loaded {len(window.step_widget.image_list)} images"
-                    )
+            if window.widget.load_images(folder_path):
+                window.statusBar().showMessage(
+                    f"Loaded {len(window.image_list)} images"
+                )
     
     window.show()
     sys.exit(app.exec())

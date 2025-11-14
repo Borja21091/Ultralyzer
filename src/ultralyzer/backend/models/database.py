@@ -348,7 +348,9 @@ class DatabaseManager:
         session = self.session
         results = []
         try:
-            results = session.query(QCResult).filter(
+            results = session.query(MetaData).join(
+                QCResult, MetaData.id == QCResult.id
+            ).filter(
                 QCResult.decision.in_([QCDecisionEnum.PASS, QCDecisionEnum.BORDERLINE])
             ).filter(
                 ~QCResult.id.in_(

@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox
 )
 from frontend.widgets.widget_base import BaseWidget
-from frontend.widgets.widget_s1 import QualityControlWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
 from backend.models.segmentor import UnetSegmentor
@@ -20,16 +19,12 @@ class MainWindow(QMainWindow):
         "properties": {"name": "Properties", "order": 3}
     }
     
-    def __init__(self, step: str = "qc"):
+    def __init__(self):
         super().__init__()
         
-        # Validate step
-        if step not in self.STEPS:
-            raise ValueError(f"Invalid step: {step}. Must be one of {list(self.STEPS.keys())}")
-        
-        self.current_step = step
-        self.image_folder = None
-        self.db_manager = DatabaseManager()
+        self._image_folder = None
+        self._db_manager = DatabaseManager()
+        self._image_list = []
         
         # Initialize window
         self.setWindowTitle("Ultralyzer - Retinal Image Processing Pipeline")
@@ -46,7 +41,7 @@ class MainWindow(QMainWindow):
         
         # Folder selection
         btn_select_folder = QPushButton("📁 Select Image Folder")
-        btn_select_folder.clicked.connect(self.on_select_folder)
+        btn_select_folder.clicked.connect(self._on_select_folder)
         top_layout.addWidget(btn_select_folder)
         
         self.folder_label = QLabel("No folder selected")
@@ -56,53 +51,61 @@ class MainWindow(QMainWindow):
         # Dropdown with image names in folder
         self.image_dropdown = QComboBox()
         self.image_dropdown.setPlaceholderText("Select an image")
-        self.image_dropdown.activated.connect(self.on_select_image)
+        self.image_dropdown.activated.connect(self._on_select_image)
         top_layout.addWidget(self.image_dropdown)
 
         main_layout.addLayout(top_layout)
         
         # Create step-specific widget
-        self.step_widget = self._create_step_widget()
-        self.step_widget.index_changed.connect(self.image_dropdown.setCurrentIndex)
-        main_layout.addWidget(self.step_widget, 1)
+        self.widget = self._create_widget()
+        self.widget.index_changed.connect(self.image_dropdown.setCurrentIndex)
+        main_layout.addWidget(self.widget, 1)
         
         # Status bar
         self.statusBar().showMessage("Ready")
-        
-    def _create_step_widget(self) -> BaseWidget:
-        """Create the appropriate widget for the selected step"""
-
-        if self.current_step == "qc":
-            widget = QualityControlWidget(self.db_manager)
-            widget.decision_made.connect(self.on_qc_decision)
-            widget.all_images_reviewed.connect(self.on_all_images_reviewed)
-            return widget
-        
-        elif self.current_step == "seg":
-            segmentor = UnetSegmentor()
-            widget = SegmentationWidget(segmentor, self.db_manager)
-            widget.status_text.connect(self.statusBar().showMessage)
-            return widget
-        
-        else:
-            raise ValueError(f"Unknown step: {self.current_step}")
     
-    def on_select_image(self, img_idx: int):
+    @property
+    def image_folder(self):
+        """Get current image folder"""
+        return self._image_folder
+    
+    @property
+    def db_manager(self):
+        """Get database manager"""
+        return self._db_manager
+    
+    @property
+    def image_list(self):
+        return self._image_list
+    
+    @image_list.setter
+    def image_list(self, files: list):
+        self._image_list = files
+    
+    def _create_widget(self) -> BaseWidget:
+        """Create the appropriate widget for the selected step"""
+        segmentor = UnetSegmentor()
+        widget = SegmentationWidget(segmentor, self._db_manager)
+        widget.decision_made.connect(self._on_qc_decision)
+        widget.status_text.connect(self.statusBar().showMessage)
+        return widget
+    
+    def _on_select_image(self, img_idx: int):
         """Handle image selection from dropdown"""        
-        if not self.image_folder:
+        if not self._image_folder:
             QMessageBox.warning(self, "No Folder Selected", "Please select an image folder first.")
             return
         
-        self.step_widget.index = img_idx
-        self.step_widget.display_image()
+        self.widget.index = img_idx
+        self.widget.display_image()
         
         image_name = self.image_dropdown.itemText(img_idx)
-        image_path = self.image_folder / image_name
+        image_path = self._image_folder / image_name
         if not image_path.exists():
             QMessageBox.warning(self, "Image Not Found", f"The selected image does not exist: {image_path}")
             return
     
-    def on_select_folder(self):
+    def _on_select_folder(self):
         """Select image folder"""
         folder = QFileDialog.getExistingDirectory(
             self,
@@ -112,12 +115,12 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         
-        self.image_folder = Path(folder)
-        self.folder_label.setText(f"📂 {self.image_folder.name}")
-        self.statusBar().showMessage(f"Loaded folder: {self.image_folder.name}")
+        self._image_folder = Path(folder)
+        self.folder_label.setText(f"📂 {self._image_folder.name}")
+        self.statusBar().showMessage(f"Loaded folder: {self._image_folder.name}")
         
         # Load images in the appropriate widget
-        self.load_images(self.image_folder)
+        self.load_images(self._image_folder)
     
     def load_images(self, folder: Path):
         """
@@ -126,11 +129,12 @@ class MainWindow(QMainWindow):
         if not folder.is_dir():
             raise ValueError(f"Invalid folder: {folder}")
         
-        self.step_widget.load_images(folder)
-        image_files = self.step_widget.image_paths
+        self.widget.load_images(folder)
+        image_files = self.widget.image_paths
         image_files = [p.name for p in image_files]
+        self.image_list = image_files
         
-        if not image_files:
+        if not self.image_list:
             return False
         
         self.image_dropdown.clear()
@@ -138,23 +142,8 @@ class MainWindow(QMainWindow):
         
         return True
     
-    def on_qc_decision(self, filename: str, decision: str):
+    def _on_qc_decision(self, filename: str, decision: str):
         """Handle quality control decision"""
         status = f"Decided: {filename} → {decision.upper()}"
         self.statusBar().showMessage(status)
     
-    def on_all_images_reviewed(self):
-        """Handle completion of QC review"""
-        stats = self.db_manager.get_statistics()
-        
-        summary = (
-            f"Quality Control Review Complete!\n\n"
-            f"✅ PASS: {stats['pass']}\n"
-            f"⚠️ BORDERLINE: {stats['borderline']}\n"
-            f"❌ REJECT: {stats['reject']}\n\n"
-            f"Total: {stats['total']} images"
-        )
-        
-        QMessageBox.information(self, "Review Complete", summary)
-        self.statusBar().showMessage("QC review complete")
-        

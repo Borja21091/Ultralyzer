@@ -151,5 +151,5 @@ class SegmentationStep(ProcessingStep):
     
     def get_pending_images(self):
         """Get all images that need segmentation"""
-        qc_results = self.db_manager.get_pending_segmentations()
-        return qc_results
+        metadata = self.db_manager.get_pending_segmentations()
+        return sorted(metadata, key=lambda x: x.name)
