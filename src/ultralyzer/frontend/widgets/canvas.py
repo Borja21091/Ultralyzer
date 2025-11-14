@@ -72,6 +72,7 @@ class OverlayLayer:
         self._channel = "both"
         self._opacity = 0.75
         self._pixmap = None
+        self._is_dirty = False
         self._undo_stack = QUndoStack()
         self._update_display()
     
@@ -139,16 +140,21 @@ class OverlayLayer:
     def undo(self):
         """Undo last edit"""
         self._undo_stack.undo()
+        self._is_dirty = True
+        if self._undo_stack.count() == 0:
+            self._is_dirty = False
     
     def redo(self):
         """Redo last undone edit"""
         self._undo_stack.redo()
+        self._is_dirty = True
     
     def reset(self):
         """Reset overlay to original segmentation mask state"""
         # Restore from the original array
         self._qimage = self._array_to_qimage(self._overlay_array_original)
         self._undo_stack.clear()
+        self._is_dirty = False
     
     def can_undo(self) -> bool:
         """Check if undo is available"""
@@ -157,6 +163,15 @@ class OverlayLayer:
     def can_redo(self) -> bool:
         """Check if redo is available"""
         return self._undo_stack.canRedo()
+    
+    def has_changes(self) -> bool:
+        """Check if overlay has unsaved changes"""
+        return self._is_dirty
+    
+    def mark_saved(self):
+        """Mark overlay as saved"""
+        self._is_dirty = False
+        self._undo_stack.clear()
     
     def perform_color_switch(self, x: int, y: int) -> bool:
         """
@@ -169,6 +184,8 @@ class OverlayLayer:
         Returns:
             True if a switch was performed, False if out of bounds or no color to switch
         """
+        self._is_dirty = True
+        
         # Convert QImage to numpy array for flood fill
         ptr = self._qimage.bits()
         h, w = self._qimage.height(), self._qimage.width()
@@ -286,6 +303,8 @@ class OverlayLayer:
 
     def _draw_brush_segment(self, points, radius: int):
         """Draw a single line segment on the overlay"""
+        self._is_dirty = True
+        
         painter = QPainter(self._qimage)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         pen = painter.pen()
@@ -304,21 +323,10 @@ class OverlayLayer:
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
         painter.end()
 
-    def _draw_erase_segment_original(self, points, radius: int):
-        """Erase a single line segment"""
-        painter = QPainter(self._qimage)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        pen = painter.pen()
-        pen.setWidth(2 * radius)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
-        painter.end()
-    
     def _draw_erase_segment(self, points, radius: int):
         """Erase a single line segment, respecting the current channel"""
+        self._is_dirty = True
+        
         # Get pixel data directly for selective channel erasing
         ptr = self._qimage.bits()
         h, w = self._qimage.height(), self._qimage.width()
@@ -352,6 +360,8 @@ class OverlayLayer:
         Draw a smart paint segment: paint over existing vessels only.
         Only non-black pixels under the brush stroke are painted with the target color.
         """
+        self._is_dirty = True
+        
         # Determine target color based on channel (avoid repeated if checks)
         color_map = {
             'both': (255, 255),      # Magenta: B=255, R=255

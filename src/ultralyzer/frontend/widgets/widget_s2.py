@@ -133,11 +133,6 @@ class SegmentationWidget(BaseWidget):
         self._edit_mode = value
     
     @property
-    def has_unsaved_changes(self) -> bool:
-        """Get unsaved changes state"""
-        return self._has_unsaved_changes
-    
-    @property
     def active_tool(self):
         """Get active editing tool"""
         return self._active_tool
@@ -206,10 +201,10 @@ class SegmentationWidget(BaseWidget):
         """Set brush size"""
         self._brush_size = min(max(1, size), 500)
 
-    @has_unsaved_changes.setter
-    def has_unsaved_changes(self, value: bool):
-        """Set unsaved changes state"""
-        self._has_unsaved_changes = value
+    @property
+    def has_unsaved_changes(self) -> bool:
+        """Get unsaved changes state"""
+        return self._overlay_layer.has_changes()
 
     ############ UI ############
     
@@ -349,13 +344,13 @@ class SegmentationWidget(BaseWidget):
         decision_buttons_layout.setContentsMargins(0, 0, 0, 0)
         decision_buttons_layout.setSpacing(5)
         
-        # Reject button
-        self.btn_reject = QPushButton("❌ REJECT")
-        self.btn_reject.setMaximumWidth(200)
-        self.btn_reject.setMinimumHeight(40)
-        self.btn_reject.setStyleSheet(button_styles["reject"]["normal"])
-        self.btn_reject.clicked.connect(lambda: self._on_qc_decision("reject"))
-        decision_buttons_layout.addWidget(self.btn_reject)
+        # Pass button
+        self.btn_pass = QPushButton("✅ PASS")
+        self.btn_pass.setMaximumWidth(200)
+        self.btn_pass.setMinimumHeight(40)
+        self.btn_pass.setStyleSheet(button_styles["pass"]["normal"])
+        self.btn_pass.clicked.connect(lambda: self._on_qc_decision("pass"))
+        decision_buttons_layout.addWidget(self.btn_pass)
         
         # Borderline button
         self.btn_borderline = QPushButton("⚠️ BORDERLINE")
@@ -365,13 +360,13 @@ class SegmentationWidget(BaseWidget):
         self.btn_borderline.clicked.connect(lambda: self._on_qc_decision("borderline"))
         decision_buttons_layout.addWidget(self.btn_borderline)
         
-        # Pass button
-        self.btn_pass = QPushButton("✅ PASS")
-        self.btn_pass.setMaximumWidth(200)
-        self.btn_pass.setMinimumHeight(40)
-        self.btn_pass.setStyleSheet(button_styles["pass"]["normal"])
-        self.btn_pass.clicked.connect(lambda: self._on_qc_decision("pass"))
-        decision_buttons_layout.addWidget(self.btn_pass)
+        # Reject button
+        self.btn_reject = QPushButton("❌ REJECT")
+        self.btn_reject.setMaximumWidth(200)
+        self.btn_reject.setMinimumHeight(40)
+        self.btn_reject.setStyleSheet(button_styles["reject"]["normal"])
+        self.btn_reject.clicked.connect(lambda: self._on_qc_decision("reject"))
+        decision_buttons_layout.addWidget(self.btn_reject)
         
         quality_layout.addLayout(decision_buttons_layout)
         
@@ -1023,6 +1018,9 @@ class SegmentationWidget(BaseWidget):
         
         mask_path = seg_path / Path(self.image_path.stem + '.png')
         Image.fromarray(overlay_array).save(mask_path)
+        
+        # Mark overlay as saved
+        self._overlay_layer.mark_saved()
         
         self.status_text.emit(f"Edits saved to {mask_path}")
 
