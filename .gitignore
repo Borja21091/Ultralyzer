@@ -1,7 +1,10 @@
 # Avoid '.pt' (model weights) files being tracked by git
 *.pt
 *.DS_Store
+
+# Avoid any SQL database files being tracked by git
 *.db
+*.sqlite3
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
