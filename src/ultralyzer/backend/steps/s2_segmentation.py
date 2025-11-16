@@ -18,11 +18,13 @@ class SegmentationStep(ProcessingStep):
         db_manager: DatabaseManager = None,
         output_dir: Path = None,
         disc_segmentor: Segmentor = None,
+        fovea_segmentor: Segmentor = None,
         vessel_segmentor: Segmentor = None
     ):
         super().__init__("Segmentation", 2)
         self.segmentor = segmentor
         self.disc_segmentor = disc_segmentor
+        self.fovea_segmentor = fovea_segmentor
         self.vessel_segmentor = vessel_segmentor
         self.db_manager = db_manager or DatabaseManager()
         
@@ -63,6 +65,10 @@ class SegmentationStep(ProcessingStep):
 
             if self.disc_segmentor:
                 av_mask[:, :, 1] = self.disc_segmentor.segment(image)
+            
+            if self.fovea_segmentor:
+                mask, loc = self.fovea_segmentor.segment(image)
+                av_mask[:, :, 1] = av_mask[:, :, 1] | mask
             
             # Save masks
             base_name = Path(image_path).stem

@@ -16,7 +16,7 @@ from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
 from backend.steps.s2_segmentation import SegmentationStep
 from frontend.widgets.canvas import Canvas, ImageLayer, OverlayLayer
 
-from backend.models.segmentor import UWFVesselSegmentor, UWFDiscSegmentor
+from backend.models.segmentor import UWFFoveaSegmentor, UWFDiscSegmentor
 
 
 class BatchSegmentationWorker(QThread):
@@ -88,8 +88,10 @@ class SegmentationWidget(BaseWidget):
         # vessel_segmentor = VesselSegmentor()
         # self.step_seg = SegmentationStep(segmentor, vessel_segmentor, self.db_manager)
         disc_segmentor = UWFDiscSegmentor()
+        fovea_segmentor = UWFFoveaSegmentor()
         self.step_seg = SegmentationStep(segmentor, 
                                          disc_segmentor=disc_segmentor, 
+                                         fovea_segmentor=fovea_segmentor,
                                          db_manager=self.db_manager)
         
         # Track segmentation worker thread to prevent garbage collection

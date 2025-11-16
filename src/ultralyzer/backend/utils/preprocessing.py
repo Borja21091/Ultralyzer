@@ -167,7 +167,7 @@ def get_uwf_transform(size=(256, 256)):
 
 ################### DISC ###################
 
-def preprocess_uwf_disc_loc_seg(img: Image.Image, crop_size=(1024, 1024), centre=None) -> tuple:
+def preprocess_uwf_disc_fov_loc_seg(img: Image.Image, crop_size=(1024, 1024), centre=None) -> tuple:
     """
     Preprocess the UWF disc image for localisation.
     """
@@ -248,3 +248,27 @@ def process_uwf_vessel_map(vessel_map):
     
     return vessel_map
 
+################### FOVEA ###################
+
+def process_uwf_fov_map(map):
+    """
+    Post-process the UWF fovea map.
+    """
+    # Keep largest connected component
+    num_labels, labels_im = cv2.connectedComponents(map.astype(np.uint8), connectivity=8)
+    largest_label = 1 + np.argmax(np.bincount(labels_im.flat)[1:])
+    map = np.zeros_like(map)
+    map[labels_im == largest_label] = 1
+    
+    # Fill holes
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
+    map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel)
+    
+    # Edge smoothing
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+    map = cv2.morphologyEx(map, cv2.MORPH_OPEN, kernel)
+    map = cv2.GaussianBlur(map, (5, 5), 0)
+    _, map = cv2.threshold(map, 0.5, 1, cv2.THRESH_BINARY)
+    map = map.astype(np.uint8) * 255
+    
+    return map

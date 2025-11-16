@@ -8,7 +8,7 @@ from pathlib import Path, PosixPath, PurePath
 from backend.models.unet.model import UNetModel
 from definitions import UNET_MODEL_DIR, MODELS_DIR, MODEL_BASE_URL_UWF
 from backend.utils.preprocessing import preprocess_image, get_bounding_box, find_vessels, get_mask, get_uwf_transform
-from backend.utils.preprocessing import preprocess_uwf_disc_loc_seg, process_uwf_disc_map, localise_centre_mass
+from backend.utils.preprocessing import preprocess_uwf_disc_fov_loc_seg, process_uwf_disc_map, localise_centre_mass, process_uwf_fov_map
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"]="1"
 import torch
@@ -400,22 +400,6 @@ class UWFDiscLocaliser(Segmentor):
     ############ PROPERTIES ############
     
     @property
-    def patchsize(self):
-        return self._patchsize
-    
-    @patchsize.setter
-    def patchsize(self, value: int):
-        self._patchsize = value
-    
-    @property
-    def batch(self):
-        return self._batch
-    
-    @batch.setter
-    def batch(self, value: int):
-        self._batch = value
-    
-    @property
     def threshold(self):
         return self._threshold
     
@@ -425,7 +409,7 @@ class UWFDiscLocaliser(Segmentor):
     
     ############ PUBLIC METHODS ############
     
-    def segment(self, img, soft_pred=False)-> Tuple:
+    def segment(self, img, soft_pred=False) -> Tuple:
         """Segment disc in the image.
         
         Returns:
@@ -440,7 +424,7 @@ class UWFDiscLocaliser(Segmentor):
             img = img.convert('RGB')
             
         # Preprocess image
-        img, tl = preprocess_uwf_disc_loc_seg(img)
+        img, tl = preprocess_uwf_disc_fov_loc_seg(img)
         img_shape = (img.height, img.width)
         
         # If downsamples to (1024, 1024), prepare for upsampling
@@ -456,7 +440,7 @@ class UWFDiscLocaliser(Segmentor):
                 
             # Return if soft_pred, otherwise post-process
             if soft_pred:
-                return (pred.cpu().numpy(), None, None)
+                return (pred.cpu().numpy(), None)
             else:
                 pred = (pred > self.threshold).squeeze().cpu().numpy().astype(np.uint8)
                 pred = process_uwf_disc_map(pred)
@@ -477,8 +461,6 @@ class UWFDiscDetailedSegmenter(Segmentor):
         Core inference class for UWF detailed disc segmentation.
         """
         super().__init__("uwf_disc_seg", "1.0")
-        self._patchsize = 256
-        self._batch = 32
         self.transform = get_uwf_transform(size=(256, 256))
         self._threshold = threshold
         self.device = DEVICE
@@ -503,22 +485,6 @@ class UWFDiscDetailedSegmenter(Segmentor):
     ############ PROPERTIES ############
     
     @property
-    def patchsize(self):
-        return self._patchsize
-    
-    @patchsize.setter
-    def patchsize(self, value: int):
-        self._patchsize = value
-    
-    @property
-    def batch(self):
-        return self._batch
-    
-    @batch.setter
-    def batch(self, value: int):
-        self._batch = value
-    
-    @property
     def threshold(self):
         return self._threshold
     
@@ -541,7 +507,7 @@ class UWFDiscDetailedSegmenter(Segmentor):
             img = img.convert('RGB')
             
         # Preprocess image
-        img, _ = preprocess_uwf_disc_loc_seg(img, centre=od_centre, crop_size=(256, 256))
+        img, _ = preprocess_uwf_disc_fov_loc_seg(img, centre=od_centre, crop_size=(256, 256))
         img_shape = (img.height, img.width)
         
         # If downsamples to (256, 256), prepare for upsampling
@@ -612,3 +578,126 @@ class UWFDiscSegmentor(Segmentor):
                loc[1] - w//2 : loc[1] + w//2] = disc_mask
         
         return output
+
+
+class UWFFoveaLocaliser(Segmentor):
+    
+    DEFAULT_MODEL_NAME = 'fovea_localisation.pt'
+    DEFAULT_MODEL_URL = MODEL_BASE_URL_UWF + '/' + DEFAULT_MODEL_NAME
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_MODEL_PATH = os.path.join(MODELS_DIR, 'uwf', DEFAULT_MODEL_NAME)
+    
+    def __init__(self, model_path=DEFAULT_MODEL_URL, threshold=DEFAULT_THRESHOLD, local_model_path=DEFAULT_MODEL_PATH):
+        """
+        Core inference class for UWF rough disc localisation.
+        """
+        super().__init__("uwf_fovea_localiser", "1.0")
+        self.transform = get_uwf_transform(size=(512, 512))
+        self._threshold = threshold
+        self.device = DEVICE
+        self.model = SegmentationModel('segformer', 'resnet34', in_channels=1).to(self.device)
+        
+        if not os.path.exists(local_model_path):
+            torch.hub.load_state_dict_from_url(model_path, os.path.join(MODELS_DIR, 'uwf'), map_location=self.device)
+        
+        self.model.load_state_dict(torch.load(local_model_path, map_location=self.device))
+            
+        if self.device != "cpu":
+            print("UWF fovea localisation has been loaded with GPU acceleration!")
+        self.model.eval()
+        
+    def __call__(self, x):
+        """Direct call for inference on single image"""
+        return self.segment(x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}(threshold={self.threshold})'
+    
+    ############ PROPERTIES ############
+    
+    @property
+    def threshold(self):
+        return self._threshold
+    
+    @threshold.setter
+    def threshold(self, value: float):
+        self._threshold = value
+    
+    ############ PUBLIC METHODS ############
+    
+    @torch.inference_mode()
+    def segment(self, img, soft_pred=False) -> Tuple:
+        """
+        Inference on a single image
+        """
+        if isinstance(img, (str, PurePath, PosixPath)):
+            img = Image.open(img).convert('RGB')
+        elif isinstance(img, np.ndarray):
+            img = Image.fromarray(img).convert('RGB')
+        elif isinstance(img, Image.Image):
+            img = img.convert('RGB')
+        
+        # Preprocess image
+        img, tl = preprocess_uwf_disc_fov_loc_seg(img)
+        img_shape = (img.height, img.width)
+        
+        # If downsamples to (1024, 1024), prepare for upsampling
+        RESIZE = T.Resize(img_shape, antialias=True)
+        
+        with torch.no_grad():
+            img, (M, N) = self.transform(img)
+            img = img.unsqueeze(0).to(self.device)
+            pred = self.model(img).squeeze(0).sigmoid()[:, :M, :N]
+            
+            # Resize back to native resolution
+            pred = RESIZE(tv_tensors.Image(pred))[0]
+                
+            # Return if soft_pred, otherwise post-process
+            if soft_pred:
+                return (pred.cpu().numpy(), None, None)
+            else:
+                pred = (pred > self.threshold).squeeze().cpu().numpy().astype(np.uint8)
+                pred = process_uwf_fov_map(pred)
+                loc = localise_centre_mass(pred) # Location in cropped image
+                loc = (loc[0] + tl[0], loc[1] + tl[1]) # (row, col) -> (y, x) # Location in original image
+                return (pred, loc, tl)
+
+
+class UWFFoveaSegmentor(Segmentor):
+    """Wrapper class for UWF fovea segmentation"""
+    
+    def __init__(self, 
+                 localiser: UWFFoveaLocaliser = None):
+        """
+        Core inference class for UWF fovea segmentation.
+        """
+        super().__init__("uwf_fovea_full_seg", "1.0")
+        self.localiser = localiser if localiser is not None else UWFFoveaLocaliser()
+    
+    def __call__(self, x):
+        """Direct call for inference on single image"""
+        return self.segment(x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+    
+    ############ PUBLIC METHODS ############
+    
+    def segment(self, image) -> Tuple[np.ndarray, Tuple[int, int]]:
+        """Segment fovea in the image."""
+        if isinstance(image, (str, PurePath, PosixPath)):
+            image = np.array(Image.open(image).convert('RGB'))
+        elif isinstance(image, Image.Image):
+            image = np.array(image.convert('RGB'))
+            
+        # First localise fovea
+        pred, loc, tl = self.localiser.segment(image)
+        h, w = pred.shape[:2]
+        
+        # Prepare output
+        output = np.zeros_like(image[:, :, 0], dtype=np.uint8)
+        
+        # Place fovea location in output
+        output[tl[0]:tl[0] + h, tl[1]:tl[1] + w] = pred
+        
+        return (output, loc)
