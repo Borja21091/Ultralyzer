@@ -8,7 +8,7 @@ DB_DIR = os.path.join(ROOT_DIR, ".db")
 
 # MODEL DIRECTORY
 UNET_MODEL_DIR = os.path.join(ROOT_DIR, "backend", "models", "unet", "weights")
-VESSEL_MODEL_DIR = os.path.join(ROOT_DIR, "backend", "models", "vessel")
+MODELS_DIR = os.path.join(ROOT_DIR, "backend", "models")
 
 # MODEL DOWNLOAD BASE URL
 MODEL_BASE_URL_UWF = 'https://github.com/Borja21091/palloryzer/releases/download/uwf_model_weights'

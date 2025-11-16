@@ -15,12 +15,14 @@ class SegmentationStep(ProcessingStep):
     def __init__(
         self,
         segmentor: Segmentor,
-        vessel_segmentor: Segmentor = None,
         db_manager: DatabaseManager = None,
-        output_dir: Path = None
+        output_dir: Path = None,
+        disc_segmentor: Segmentor = None,
+        vessel_segmentor: Segmentor = None
     ):
         super().__init__("Segmentation", 2)
         self.segmentor = segmentor
+        self.disc_segmentor = disc_segmentor
         self.vessel_segmentor = vessel_segmentor
         self.db_manager = db_manager or DatabaseManager()
         
@@ -59,6 +61,9 @@ class SegmentationStep(ProcessingStep):
                 (self.output_dir / "binary").mkdir(parents=True, exist_ok=True)
                 Image.fromarray(v_mask * 255).save(str(self.output_dir / "binary" / f"{base_name}.png"))
 
+            if self.disc_segmentor:
+                av_mask[:, :, 1] = self.disc_segmentor.segment(image)
+            
             # Save masks
             base_name = Path(image_path).stem
             mask_path = self.output_dir / "mask"

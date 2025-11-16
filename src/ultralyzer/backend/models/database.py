@@ -22,18 +22,9 @@ class MetaData(Base):
     __tablename__ = "metadata"
     
     id = Column(Integer, primary_key=True)
+    extension = Column(String, nullable=False)
     name = Column(String, unique=True, nullable=False)
     folder = Column(String, nullable=False)
-
-    # Processing steps {False: not done, True: done}
-    s1_qc = Column(Boolean, default=False)
-    s2_segmentation = Column(Boolean, default=False)
-    s3_img_props = Column(Boolean, default=False)
-    s4_vessel_props = Column(Boolean, default=False)
-    s5_av_correction = Column(Boolean, default=False)
-    s6_wg = Column(Boolean, default=False)
-    s7_fd = Column(Boolean, default=False)
-    s8_choroid = Column(Boolean, default=False)
 
 
 class QCResult(Base):
@@ -59,6 +50,7 @@ class SegmentationResult(Base):
     __tablename__ = "segmentation_results"
 
     id = Column(Integer, ForeignKey("metadata.id"), primary_key=True)
+    extension = Column(String, nullable=False)
     name = Column(String, ForeignKey("metadata.name"),
                   unique=True, nullable=False)
     
@@ -76,7 +68,7 @@ class SegmentationResult(Base):
     meta = relationship("MetaData", foreign_keys=[id])
     
     def __repr__(self):
-        return f"<SegmentationResult(name={self.name}, av_folder={self.av_folder}, vessel_folder={self.vessel_folder})>"
+        return f"<SegmentationResult(name={self.name + self.extension}, av_folder={self.av_folder}, vessel_folder={self.vessel_folder})>"
     
 
 class DatabaseManager:
@@ -126,6 +118,28 @@ class DatabaseManager:
         finally:
             session.close()
     
+    ############ PROPERTIES ############
+    
+    @property
+    def session(self):
+        """Get a new database session"""
+        return self.SessionLocal()
+    
+    ############ METADATA GET METHODS ############
+    
+    def get_metadata_by_filename(self, name: str) -> MetaData:
+        """Get metadata for a specific image by filename"""
+        session = self.session
+        if name.endswith(tuple(IMAGE_FORMATS)):
+            name = name.rsplit('.', 1)[0]
+        try:
+            meta = session.query(MetaData).filter_by(name=name).first()
+            return meta
+        finally:
+            session.close()
+    
+    ############ METADATA SET METHODS ############
+    
     def save_folder_metadata(self, folder: Path) -> bool:
         """
         Save metadata for all images in a folder.
@@ -142,15 +156,18 @@ class DatabaseManager:
                 f for f in folder.iterdir()
                 if f.suffix.lower() in IMAGE_FORMATS
             ]
+            image_files.sort()
             
             for img_path in image_files:
-                name = str(img_path.name)
+                name = str(img_path.stem)
+                extension = str(img_path.suffix.lower())
                 folder_str = str(folder)
                 
                 # Check if metadata already exists
                 existing = session.query(MetaData).filter_by(name=name).first()
                 if not existing:
                     meta = MetaData(
+                        extension=extension,
                         name=name,
                         folder=folder_str
                     )
@@ -168,13 +185,6 @@ class DatabaseManager:
         
         finally:
             session.close()
-    
-    ############ PROPERTIES ############
-    
-    @property
-    def session(self):
-        """Get a new database session"""
-        return self.SessionLocal()
     
     ############ QC GET METHODS ############
     
@@ -294,11 +304,11 @@ class DatabaseManager:
         finally:
             session.close()
     
-    def delete_qc_result(self, image_path: str) -> bool:
+    def delete_qc_result(self, name: str) -> bool:
         """Delete QC result for an image"""
         session = self.session
         try:
-            session.query(QCResult).filter_by(image_path=image_path).delete()
+            session.query(QCResult).filter_by(name=name).delete()
             session.commit()
             return True
         except Exception as e:
@@ -362,13 +372,20 @@ class DatabaseManager:
             session.close()
             return results
     
-    def get_segmentation_result(self, qc_result_id: int):
+    def get_segmentation_result(self, name: str) -> SegmentationResult:
+        """Get segmentation result for a specific image"""
+        session = self.session
+        try:
+            result = session.query(SegmentationResult).filter_by(name=name).first()
+            return result
+        finally:
+            session.close()
+    
+    def get_segmentation_result_by_id(self, id: int):
         """Get segmentation result for a QC result"""
         session = self.session
         try:
-            result = session.query(SegmentationResult).filter_by(
-                qc_result_id=qc_result_id
-            ).first()
+            result = session.query(SegmentationResult).filter_by(id=id).first()
             return result
         finally:
             session.close()
@@ -384,6 +401,56 @@ class DatabaseManager:
     
     ############ SEGMENTATION SET METHODS ############
 
+    def set_mask_info(self, id: int, mask_path: Path, suffix: Path, mask_type: str = "av") -> bool:
+        """
+        Set mask information for an image.
+        
+        Args:
+            id: ID of the image metadata
+            mask_path: Path to the mask file
+            mask_type: Type of mask ('av' or 'vessel')
+        Returns:
+            True if successful, False otherwise
+        """
+        session = self.session
+        try:
+            meta = session.query(MetaData).filter_by(id=id).first()
+            if not meta:
+                print(f"Error: No metadata found for ID {id}")
+                return False
+            
+            seg_result = session.query(SegmentationResult).filter_by(id=id).first()
+            # Add new entry if not exists
+            if not seg_result:
+                seg_result = SegmentationResult(
+                    id=id,
+                    extension=str(suffix).lower(),
+                    name=meta.name,
+                    av_folder="",
+                    vessel_folder=""
+                )
+                session.add(seg_result)
+            
+            # Update (now) existing entry
+            if mask_type == "av":
+                seg_result.av_folder = str(mask_path)
+            elif mask_type == "vessel":
+                seg_result.vessel_folder = str(mask_path)
+            else:
+                print(f"Error: Invalid mask type {mask_type}")
+                return False
+            
+            session.commit()
+            return True
+        
+        except Exception as e:
+            session.rollback()
+            print(f"Error setting mask info: {str(e)}")
+            return False
+        
+        finally:
+            session.close()
+    
     def save_segmentation_result(
         self,
         id: int,

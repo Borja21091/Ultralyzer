@@ -16,7 +16,7 @@ from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
 from backend.steps.s2_segmentation import SegmentationStep
 from frontend.widgets.canvas import Canvas, ImageLayer, OverlayLayer
 
-from backend.models.segmentor import VesselSegmentor
+from backend.models.segmentor import UWFVesselSegmentor, UWFDiscSegmentor
 
 
 class BatchSegmentationWorker(QThread):
@@ -84,9 +84,13 @@ class SegmentationWidget(BaseWidget):
     
     def __init__(self, segmentor: Segmentor, db_manager: DatabaseManager = None):
         super().__init__(db_manager)
-        self.step_seg = SegmentationStep(segmentor, db_manager=self.db_manager)
+        # self.step_seg = SegmentationStep(segmentor, db_manager=self.db_manager)
         # vessel_segmentor = VesselSegmentor()
         # self.step_seg = SegmentationStep(segmentor, vessel_segmentor, self.db_manager)
+        disc_segmentor = UWFDiscSegmentor()
+        self.step_seg = SegmentationStep(segmentor, 
+                                         disc_segmentor=disc_segmentor, 
+                                         db_manager=self.db_manager)
         
         # Track segmentation worker thread to prevent garbage collection
         self._worker_thread = None
@@ -188,8 +192,9 @@ class SegmentationWidget(BaseWidget):
     @property
     def segmentation_mask_path(self) -> Path:
         """Get segmentation mask path for current image"""
-        name = self.image_path.name
-        return self.db_manager.get_segmentation_mask_path(name)
+        name = str(self.image_path.stem)
+        suffix = str(self.image_path.suffix)
+        return self.db_manager.get_segmentation_mask_path(name, suffix)
 
     @property
     def brush_size(self) -> int:
@@ -573,7 +578,7 @@ class SegmentationWidget(BaseWidget):
         
         # Edit mode shortcuts
         sc_save = QShortcut(QKeySequence.StandardKey.Save, self)
-        sc_save.activated.connect(self._on_save_edits)
+        sc_save.activated.connect(self._on_save)
         sc_undo = QShortcut(QKeySequence.StandardKey.Undo, self)
         sc_undo.activated.connect(self._on_undo)
         sc_redo = QShortcut(QKeySequence.StandardKey.Redo, self)
@@ -628,12 +633,14 @@ class SegmentationWidget(BaseWidget):
         
         # Get image and segmentation paths
         image_path = self.image_path
-        name = image_path.name
+        name = image_path.stem
         
         # Load notes if any
         qc_result = self.db_manager.get_qc_result(name)
         if qc_result:
+            self._load_state(qc_result)
             self.notes_text.setPlainText(qc_result.notes)
+            self._highlight_decision(qc_result.decision.value)
         
         # Load image
         image = cv2.cvtColor(cv2.imread(str(image_path)), cv2.COLOR_BGR2RGB)
@@ -641,9 +648,9 @@ class SegmentationWidget(BaseWidget):
         
         # Load or create overlay - default to empty
         overlay_array = np.zeros_like(image)
-        seg_path = self.db_manager.get_segmentation_mask_path(name)
-        if seg_path and seg_path.exists():
-            mask_path = seg_path / Path(name.split('.')[0] + '.png')
+        seg_result = self.db_manager.get_segmentation_result(name)
+        if seg_result:
+            mask_path = Path(seg_result.av_folder) / Path(str(seg_result.name) + str(seg_result.extension))
             if mask_path.exists():
                 overlay_array = np.array(Image.open(mask_path))
         
@@ -706,7 +713,8 @@ class SegmentationWidget(BaseWidget):
         )
         
         if reply == QMessageBox.Save:
-            self._on_save_edits()
+            self._save_state()
+            self._save_edits()
         elif reply == QMessageBox.Cancel:
             return False
         
@@ -747,7 +755,16 @@ class SegmentationWidget(BaseWidget):
             scaled_radius = (self.brush_size / 2) * self.canvas._zoom_level
             cursor = self._create_brush_cursor(scaled_radius)
             self.canvas.setCursor(cursor)
+    
+    def _load_state(self, qc_result):
+        """Load QC data into state"""
+        if not self.image_paths:
+            return
         
+        self.state['filename'] = qc_result.name
+        self.state['decision'] = qc_result.decision.value
+        self.state['notes'] = qc_result.notes
+    
     def _save_state(self):
         """Save current image's QC data"""
         if not self.image_paths:
@@ -767,6 +784,37 @@ class SegmentationWidget(BaseWidget):
             return False
         return True
         
+    def _save_edits(self):
+        """Save current overlay edits"""
+        # Get the RGB array from overlay
+        overlay_array = self.canvas.overlay_layer.get_array()
+        
+        # Get id of current image
+        name = str(self.image_path.stem)
+        qc_result = self.db_manager.get_qc_result(name)
+        id = qc_result.id
+        
+        # Get segmentation results
+        seg_result = self.db_manager.get_segmentation_result_by_id(id)
+        if seg_result is None:
+            self.status_text.emit("No segmentation result found in database")
+            return
+        
+        extension = str(seg_result.extension)
+        seg_path = seg_result.mask_path
+        
+        # Save to file  
+        # seg_path = self.db_manager.get_segmentation_mask_path(self.image_path.stem, self.image_path.suffix)
+        seg_path.mkdir(parents=True, exist_ok=True)
+        
+        mask_path = seg_path / Path(name + extension)
+        Image.fromarray(overlay_array).save(mask_path)
+        
+        # Mark overlay as saved
+        self._overlay_layer.mark_saved()
+        
+        self.status_text.emit(f"Edits saved to {mask_path}")
+        
     ############ ACTIONS ############
     
     def _on_qc_decision(self, decision: str):
@@ -780,7 +828,7 @@ class SegmentationWidget(BaseWidget):
         self.canvas_color = decision
 
         # Update state
-        self.state['filename'] = self.image_path.name
+        self.state['filename'] = self.image_path.stem
         self.state['decision'] = decision
         self.state['notes'] = notes
 
@@ -794,6 +842,7 @@ class SegmentationWidget(BaseWidget):
             self._prompt_save_changes()
         
         if self.next_image():
+            self._save_state()
             self._reset_buttons_state()
             self.display_image()
     
@@ -803,6 +852,7 @@ class SegmentationWidget(BaseWidget):
             self._prompt_save_changes()
         
         if self.previous_image():
+            self._save_state()
             self._reset_buttons_state()
             self.display_image()
     
@@ -873,7 +923,7 @@ class SegmentationWidget(BaseWidget):
         self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
         
         try:
-            qc_result = self.db_manager.get_qc_result(self.image_path.name)
+            qc_result = self.db_manager.get_qc_result(self.image_path.stem)
             success = self.step_seg.process_and_save_to_db(
                 str(self.image_path),
                 qc_result.id
@@ -905,8 +955,8 @@ class SegmentationWidget(BaseWidget):
         self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
         
         try:
-            qc_result = self.db_manager.get_qc_result(self.image_path.name)
-            self.worker_thread = SingleSegmentationWorker(self.step_seg, self.image_path, qc_result.id)
+            metadata = self.db_manager.get_metadata_by_filename(self.image_path.stem)
+            self.worker_thread = SingleSegmentationWorker(self.step_seg, self.image_path, metadata.id)
             self.worker_thread.finished.connect(self._on_finished)
             self.worker_thread.finished.connect(self._on_worker_finished)
             self.worker_thread.start()
@@ -1006,23 +1056,11 @@ class SegmentationWidget(BaseWidget):
         if reply == QMessageBox.Yes and self._overlay_layer:
             self._overlay_layer.reset()
             self.canvas.update_overlay_display()
-    
-    def _on_save_edits(self):
-        """Save current overlay edits"""
-        # Get the RGB array from overlay
-        overlay_array = self.canvas.overlay_layer.get_array()
-        
-        # Save to file
-        seg_path = self.db_manager.get_segmentation_mask_path(self.image_path.name)
-        seg_path.mkdir(parents=True, exist_ok=True)
-        
-        mask_path = seg_path / Path(self.image_path.stem + '.png')
-        Image.fromarray(overlay_array).save(mask_path)
-        
-        # Mark overlay as saved
-        self._overlay_layer.mark_saved()
-        
-        self.status_text.emit(f"Edits saved to {mask_path}")
+
+    def _on_save(self):
+        """Handle save action"""
+        self._save_edits()
+        self._save_state()
 
     def _on_opacity_changed(self, value: int):
         """Handle opacity slider changes"""

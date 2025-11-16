@@ -1,8 +1,10 @@
 from pathlib import Path
+from definitions import IMAGE_FORMATS
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox
 )
+from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
@@ -13,56 +15,17 @@ class MainWindow(QMainWindow):
     Main application window - displays selected processing step
     """
     
-    STEPS = {
-        "qc": {"name": "Quality Control", "order": 1},
-        "seg": {"name": "Segmentation", "order": 2},
-        "properties": {"name": "Properties", "order": 3}
-    }
-    
     def __init__(self):
         super().__init__()
         
         self._image_folder = None
+        self._mask_folder = None
         self._db_manager = DatabaseManager()
         self._image_list = []
         
-        # Initialize window
-        self.setWindowTitle("Ultralyzer - Retinal Image Processing Pipeline")
-        self.showMaximized()
-        
-        # Create central widget
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Top: Folder selection and step info
-        top_layout = QHBoxLayout()
-        
-        # Folder selection
-        btn_select_folder = QPushButton("📁 Select Image Folder")
-        btn_select_folder.clicked.connect(self._on_select_folder)
-        top_layout.addWidget(btn_select_folder)
-        
-        self.folder_label = QLabel("No folder selected")
-        self.folder_label.setWordWrap(True)
-        top_layout.addWidget(self.folder_label, 1)
-        
-        # Dropdown with image names in folder
-        self.image_dropdown = QComboBox()
-        self.image_dropdown.setPlaceholderText("Select an image")
-        self.image_dropdown.activated.connect(self._on_select_image)
-        top_layout.addWidget(self.image_dropdown)
-
-        main_layout.addLayout(top_layout)
-        
-        # Create step-specific widget
-        self.widget = self._create_widget()
-        self.widget.index_changed.connect(self.image_dropdown.setCurrentIndex)
-        main_layout.addWidget(self.widget, 1)
-        
-        # Status bar
-        self.statusBar().showMessage("Ready")
+        self._init_ui()
+    
+    ############ PROPERTIES ############
     
     @property
     def image_folder(self):
@@ -82,6 +45,76 @@ class MainWindow(QMainWindow):
     def image_list(self, files: list):
         self._image_list = files
     
+    ############ UI ############
+    
+    def _init_ui(self):
+        """Initialize main window UI"""
+        
+        # Create menu bar
+        self._create_menu_bar()
+        
+        # Initialize window
+        self.setWindowTitle("Ultralyzer - Retinal Image Processing Pipeline")
+        self.showMaximized()
+        
+        # Create central widget
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Top: Folder label & image dropdown
+        top_layout = QHBoxLayout()
+        
+        # Folder label
+        self.folder_label = QLabel("No image folder loaded")
+        self.folder_label.setWordWrap(True)
+        top_layout.addWidget(self.folder_label, 1)
+        
+        # Dropdown with image names in folder
+        self.image_dropdown = QComboBox()
+        self.image_dropdown.setPlaceholderText("Select an image")
+        self.image_dropdown.activated.connect(self._on_select_image)
+        top_layout.addWidget(self.image_dropdown)
+
+        main_layout.addLayout(top_layout)
+        
+        # Create step-specific widget
+        self.widget = self._create_widget()
+        self.widget.index_changed.connect(self.image_dropdown.setCurrentIndex)
+        main_layout.addWidget(self.widget, 1)
+        
+        # Status bar
+        self.statusBar().showMessage("Ready")
+    
+    def _create_menu_bar(self):
+        """Create the application menu bar"""
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu("File")
+        
+        open_image_folder_action = QAction("Open Image Folder", self)
+        open_image_folder_action.triggered.connect(self._on_select_image_folder)
+        file_menu.addAction(open_image_folder_action)
+        
+        load_mask_folder_action = QAction("Load Mask Folder", self)
+        load_mask_folder_action.triggered.connect(self._on_select_mask_folder)
+        file_menu.addAction(load_mask_folder_action)
+        
+        # file_menu.addSeparator()
+        
+        # Help menu
+        help_menu = menubar.addMenu("Help")
+        
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self._on_about)
+        help_menu.addAction(about_action)
+    
+    ############ PUBLIC METHODS ############
+    
+    ############ PRIVATE METHODS ############
+    
     def _create_widget(self) -> BaseWidget:
         """Create the appropriate widget for the selected step"""
         segmentor = UnetSegmentor()
@@ -90,41 +123,9 @@ class MainWindow(QMainWindow):
         widget.status_text.connect(self.statusBar().showMessage)
         return widget
     
-    def _on_select_image(self, img_idx: int):
-        """Handle image selection from dropdown"""        
-        if not self._image_folder:
-            QMessageBox.warning(self, "No Folder Selected", "Please select an image folder first.")
-            return
-        
-        self.widget.index = img_idx
-        self.widget.display_image()
-        
-        image_name = self.image_dropdown.itemText(img_idx)
-        image_path = self._image_folder / image_name
-        if not image_path.exists():
-            QMessageBox.warning(self, "Image Not Found", f"The selected image does not exist: {image_path}")
-            return
-    
-    def _on_select_folder(self):
-        """Select image folder"""
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "Select Image Folder"
-        )
-        
-        if not folder:
-            return
-        
-        self._image_folder = Path(folder)
-        self.folder_label.setText(f"📂 {self._image_folder.name}")
-        self.statusBar().showMessage(f"Loaded folder: {self._image_folder.name}")
-        
-        # Load images in the appropriate widget
-        self.load_images(self._image_folder)
-    
-    def load_images(self, folder: Path):
+    def _load_images(self, folder: Path):
         """
-        Load images from the specified folder into combobox widget
+        Load images from the specified folder into database & combobox widget
         """
         if not folder.is_dir():
             raise ValueError(f"Invalid folder: {folder}")
@@ -142,8 +143,79 @@ class MainWindow(QMainWindow):
         
         return True
     
+    def _load_mask_info_to_db(self, mask_folder: Path):
+        """Load mask information from folder into database"""
+        mask_files = list(mask_folder.glob("*"))
+        mask_files = [f for f in mask_files if f.suffix.lower() in IMAGE_FORMATS]
+        for mask_file in mask_files:
+            mask_folder = mask_file.parent
+            mask_name = mask_file.name
+            mask_suffix = mask_file.suffix.lower()
+            if mask_suffix not in IMAGE_FORMATS:
+                continue
+            meta = self._db_manager.get_metadata_by_filename(mask_name)
+            if not meta:
+                continue
+            self._db_manager.set_mask_info(meta.id, mask_folder, mask_suffix)
+    
+    ############ ACTIONS ############
+    
+    def _on_about(self):
+        """Show about dialog"""
+        QMessageBox.information(
+            self,
+            "About Ultralyzer",
+            "Ultralyzer - Retinal Image Processing Pipeline\n\nVersion 1.0"
+        )
+    
     def _on_qc_decision(self, filename: str, decision: str):
         """Handle quality control decision"""
         status = f"Decided: {filename} → {decision.upper()}"
         self.statusBar().showMessage(status)
+    
+    def _on_select_image(self, img_idx: int):
+        """Handle image selection from dropdown"""        
+        if not self._image_folder:
+            QMessageBox.warning(self, "No Folder Selected", "Please select an image folder first.")
+            return
+        
+        self.widget.index = img_idx
+        self.widget.display_image()
+        
+        image_name = self.image_dropdown.itemText(img_idx)
+        image_path = self._image_folder / image_name
+        if not image_path.exists():
+            QMessageBox.warning(self, "Image Not Found", f"The selected image does not exist: {image_path}")
+            return
+    
+    def _on_select_image_folder(self):
+        """Select image folder"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Image Folder"
+        )
+        
+        if not folder:
+            return
+        
+        self._image_folder = Path(folder)
+        self.folder_label.setText(f"📂 {self._image_folder.name}")
+        self.statusBar().showMessage(f"Loaded folder: {self._image_folder}")
+        
+        # Load images in the appropriate widget
+        self._load_images(self._image_folder)
+    
+    def _on_select_mask_folder(self):
+        """Select mask folder"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Mask Folder"
+        )
+        
+        if not folder:
+            return
+        self._mask_folder = Path(folder)
+        self._load_mask_info_to_db(self._mask_folder)
+        self.statusBar().showMessage(f"Loaded masks from: {self._mask_folder}")
+    
     

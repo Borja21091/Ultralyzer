@@ -2,17 +2,18 @@ import os
 import numpy as np
 from PIL import Image
 from typing import Tuple
+from torchvision import tv_tensors
 from abc import ABC, abstractmethod
 from pathlib import Path, PosixPath, PurePath
 from backend.models.unet.model import UNetModel
-from definitions import UNET_MODEL_DIR, VESSEL_MODEL_DIR, MODEL_BASE_URL_UWF
-from backend.utils.preprocessing import preprocess_image, get_bounding_box, find_vessels, get_mask
+from definitions import UNET_MODEL_DIR, MODELS_DIR, MODEL_BASE_URL_UWF
+from backend.utils.preprocessing import preprocess_image, get_bounding_box, find_vessels, get_mask, get_uwf_transform
+from backend.utils.preprocessing import preprocess_uwf_disc_loc_seg, process_uwf_disc_map, localise_centre_mass
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"]="1"
 import torch
 
 from torchvision.transforms import v2 as T
-from torchvision.transforms import functional as TF
 from backend.models.models import SegmentationModel
 
 if torch.cuda.is_available():
@@ -145,6 +146,7 @@ class Segmentor(ABC):
         
         return mask
 
+
 class UnetSegmentor(Segmentor):
     """Unet-based segmentation model"""
     
@@ -237,21 +239,12 @@ class UnetSegmentor(Segmentor):
         return mask.cpu().numpy().squeeze()
 
 
-def get_uwf_vessel_transform(size=(256, 256)):
-    """Tensor, dimension and normalisation default augs for UWF Vessel Segmentation"""
-    return T.Compose([
-        T.Resize(size=size, antialias=True),
-        T.ToDtype(torch.float32, scale=True),
-        T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
-
-
-class VesselSegmentor(Segmentor):
+class UWFVesselSegmentor(Segmentor):
     
     DEFAULT_MODEL_NAME = 'vessel_segmentation.pt'
     DEFAULT_MODEL_URL = MODEL_BASE_URL_UWF + '/' + DEFAULT_MODEL_NAME
     DEFAULT_THRESHOLD = 0.5
-    DEFAULT_MODEL_PATH = os.path.join(VESSEL_MODEL_DIR, DEFAULT_MODEL_NAME)
+    DEFAULT_MODEL_PATH = os.path.join(MODELS_DIR, 'uwf', DEFAULT_MODEL_NAME)
     
     def __init__(self, model_path=DEFAULT_MODEL_URL, threshold=DEFAULT_THRESHOLD, local_model_path=DEFAULT_MODEL_PATH):
         """
@@ -262,11 +255,11 @@ class VesselSegmentor(Segmentor):
         self._batch = 32
         
         self._threshold = threshold
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+        self.device = DEVICE
         self.model = SegmentationModel('segformer', 'resnet34', in_channels=3).to(self.device)
         
         if not os.path.exists(local_model_path):
-            torch.hub.load_state_dict_from_url(model_path, os.path.join(VESSEL_MODEL_DIR, 'uwf'), map_location=self.device)
+            torch.hub.load_state_dict_from_url(model_path, os.path.join(MODELS_DIR, 'uwf'), map_location=self.device)
         
         self.model.load_state_dict(torch.load(local_model_path, map_location=self.device))
             
@@ -343,7 +336,7 @@ class VesselSegmentor(Segmentor):
         """
         h, w = image.shape[:2]
         image_tensor = torch.from_numpy(image.transpose(2, 0, 1)).unsqueeze(0).to(DEVICE) # (1, C, H, W)
-        self.transform = get_uwf_vessel_transform(size=self.patchsize)
+        self.transform = get_uwf_transform(size=self.patchsize)
         
         # Run segmentation in patches
         if self.patchsize > max(h, w):
@@ -367,3 +360,255 @@ class VesselSegmentor(Segmentor):
             mask = mask.sigmoid() >= self.threshold
             
         return mask.cpu().numpy().squeeze()
+
+
+class UWFDiscLocaliser(Segmentor):
+    
+    DEFAULT_MODEL_NAME = 'od_localisation.pt'
+    DEFAULT_MODEL_URL = MODEL_BASE_URL_UWF + '/' + DEFAULT_MODEL_NAME
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_MODEL_PATH = os.path.join(MODELS_DIR, 'uwf', DEFAULT_MODEL_NAME)
+    
+    def __init__(self, model_path=DEFAULT_MODEL_URL, threshold=DEFAULT_THRESHOLD, local_model_path=DEFAULT_MODEL_PATH):
+        """
+        Core inference class for UWF rough disc localisation.
+        """
+        super().__init__("uwf_disc_localiser", "1.0")
+        self._patchsize = 512
+        self._batch = 32
+        self.transform = get_uwf_transform(size=(512, 512))
+        self._threshold = threshold
+        self.device = DEVICE
+        self.model = SegmentationModel('segformer', 'resnet34', in_channels=1).to(self.device)
+        
+        if not os.path.exists(local_model_path):
+            torch.hub.load_state_dict_from_url(model_path, os.path.join(MODELS_DIR, 'uwf'), map_location=self.device)
+        
+        self.model.load_state_dict(torch.load(local_model_path, map_location=self.device))
+            
+        if self.device != "cpu":
+            print("UWF disc localisation has been loaded with GPU acceleration!")
+        self.model.eval()
+        
+    def __call__(self, x):
+        """Direct call for inference on single image"""
+        return self.segment(x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}(threshold={self.threshold})'
+    
+    ############ PROPERTIES ############
+    
+    @property
+    def patchsize(self):
+        return self._patchsize
+    
+    @patchsize.setter
+    def patchsize(self, value: int):
+        self._patchsize = value
+    
+    @property
+    def batch(self):
+        return self._batch
+    
+    @batch.setter
+    def batch(self, value: int):
+        self._batch = value
+    
+    @property
+    def threshold(self):
+        return self._threshold
+    
+    @threshold.setter
+    def threshold(self, value: float):
+        self._threshold = value
+    
+    ############ PUBLIC METHODS ############
+    
+    def segment(self, img, soft_pred=False)-> Tuple:
+        """Segment disc in the image.
+        
+        Returns:
+        --------
+            pred (np.ndarray): Segmentation mask
+            loc (tuple): (y, x) coordinates of the disc centre in the original image"""
+        if isinstance(img, (str, PurePath, PosixPath)):
+            img = Image.open(img).convert('RGB')
+        elif isinstance(img, np.ndarray):
+            img = Image.fromarray(img).convert('RGB')
+        elif isinstance(img, Image.Image):
+            img = img.convert('RGB')
+            
+        # Preprocess image
+        img, tl = preprocess_uwf_disc_loc_seg(img)
+        img_shape = (img.height, img.width)
+        
+        # If downsamples to (1024, 1024), prepare for upsampling
+        RESIZE = T.Resize(img_shape, antialias=True)
+        
+        with torch.no_grad():
+            img, (M, N) = self.transform(img)
+            img = img.unsqueeze(0).to(self.device)
+            pred = self.model(img).squeeze(0).sigmoid()[:, :M, :N]
+            
+            # Resize back to native resolution
+            pred = RESIZE(tv_tensors.Image(pred))[0]
+                
+            # Return if soft_pred, otherwise post-process
+            if soft_pred:
+                return (pred.cpu().numpy(), None, None)
+            else:
+                pred = (pred > self.threshold).squeeze().cpu().numpy().astype(np.uint8)
+                pred = process_uwf_disc_map(pred)
+                loc = localise_centre_mass(pred) # Location in cropped image
+                loc = (loc[0] + tl[0], loc[1] + tl[1]) # (row, col) -> (y, x) # Location in original image
+                return (pred, loc)
+
+
+class UWFDiscDetailedSegmenter(Segmentor):
+    
+    DEFAULT_MODEL_NAME = 'od_segmentation.pt'
+    DEFAULT_MODEL_URL = MODEL_BASE_URL_UWF + '/' + DEFAULT_MODEL_NAME
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_MODEL_PATH = os.path.join(MODELS_DIR, 'uwf', DEFAULT_MODEL_NAME)
+    
+    def __init__(self, model_path=DEFAULT_MODEL_URL, threshold=DEFAULT_THRESHOLD, local_model_path=DEFAULT_MODEL_PATH):
+        """
+        Core inference class for UWF detailed disc segmentation.
+        """
+        super().__init__("uwf_disc_seg", "1.0")
+        self._patchsize = 256
+        self._batch = 32
+        self.transform = get_uwf_transform(size=(256, 256))
+        self._threshold = threshold
+        self.device = DEVICE
+        self.model = SegmentationModel('segformer', 'resnet34', in_channels=1).to(self.device)
+        
+        if not os.path.exists(local_model_path):
+            torch.hub.load_state_dict_from_url(model_path, os.path.join(MODELS_DIR, 'uwf'), map_location=self.device)
+        
+        self.model.load_state_dict(torch.load(local_model_path, map_location=self.device))
+            
+        if self.device != "cpu":
+            print("UWF disc segmentation has been loaded with GPU acceleration!")
+        self.model.eval()
+        
+    def __call__(self, x: Tuple):
+        """Direct call for inference on single image"""
+        return self.segment(*x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}(threshold={self.threshold})'
+    
+    ############ PROPERTIES ############
+    
+    @property
+    def patchsize(self):
+        return self._patchsize
+    
+    @patchsize.setter
+    def patchsize(self, value: int):
+        self._patchsize = value
+    
+    @property
+    def batch(self):
+        return self._batch
+    
+    @batch.setter
+    def batch(self, value: int):
+        self._batch = value
+    
+    @property
+    def threshold(self):
+        return self._threshold
+    
+    @threshold.setter
+    def threshold(self, value: float):
+        self._threshold = value
+    
+    ############ PUBLIC METHODS ############
+    
+    @torch.inference_mode()
+    def segment(self, img, od_centre: tuple[float], soft_pred=False):
+        """
+        Inference on a single image
+        """
+        if isinstance(img, (str, PurePath, PosixPath)):
+            img = Image.open(img).convert('RGB')
+        elif isinstance(img, np.ndarray):
+            img = Image.fromarray(img).convert('RGB')
+        elif isinstance(img, Image.Image):
+            img = img.convert('RGB')
+            
+        # Preprocess image
+        img, _ = preprocess_uwf_disc_loc_seg(img, centre=od_centre, crop_size=(256, 256))
+        img_shape = (img.height, img.width)
+        
+        # If downsamples to (256, 256), prepare for upsampling
+        if img_shape != (256, 256):
+            RESIZE = T.Resize(img_shape, antialias=True)
+        else:
+            RESIZE = None
+        
+        with torch.no_grad():
+            img, (M, N) = self.transform(img)
+            img = img.unsqueeze(0).to(self.device)
+            pred = self.model(img).squeeze(0).sigmoid()[:, :M, :N]
+            
+            # Resize back to native resolution
+            if RESIZE is not None:
+                pred = RESIZE(tv_tensors.Image(pred))[0]
+                
+            # Return if soft_pred, otherwise post-process
+            if soft_pred:
+                return pred.cpu().numpy()
+            else:
+                pred = (pred > self.threshold).squeeze().cpu().numpy().astype(np.uint8)
+                pred = process_uwf_disc_map(pred)
+                return pred
+    
+
+class UWFDiscSegmentor(Segmentor):
+    """Wrapper class for UWF disc segmentation combining localisation and detailed segmentation"""
+    
+    def __init__(self, 
+                 localiser: UWFDiscLocaliser = None, 
+                 segmenter: UWFDiscDetailedSegmenter = None):
+        """
+        Core inference class for UWF disc segmentation.
+        """
+        super().__init__("uwf_disc_full_seg", "1.0")
+        self.localiser = localiser if localiser is not None else UWFDiscLocaliser()
+        self.segmenter = segmenter if segmenter is not None else UWFDiscDetailedSegmenter()
+    
+    def __call__(self, x):
+        """Direct call for inference on single image"""
+        return self.segment(x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+    
+    ############ PUBLIC METHODS ############
+    
+    def segment(self, image) -> np.ndarray:
+        """Segment disc in the image."""
+        if isinstance(image, (str, PurePath, PosixPath)):
+            image = np.array(Image.open(image).convert('RGB'))
+        elif isinstance(image, Image.Image):
+            image = np.array(image.convert('RGB'))
+            
+        # First localise disc
+        _, loc = self.localiser.segment(image)
+        
+        # Then segment disc in detail
+        disc_mask = self.segmenter.segment(image, od_centre=loc)
+        h, w = disc_mask.shape[:2]
+        
+        # Prepare output
+        output = np.zeros_like(image[:, :, 0], dtype=np.uint8)
+        
+        # Place disc mask in output
+        output[loc[0] - h//2 : loc[0] + h//2, 
+               loc[1] - w//2 : loc[1] + w//2] = disc_mask
+        
+        return output
