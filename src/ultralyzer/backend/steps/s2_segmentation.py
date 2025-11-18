@@ -10,7 +10,6 @@ from backend.steps.base_step import ProcessingStep
 from backend.models.segmentor import Segmentor
 
 class SegmentationStep(ProcessingStep):
-    """Step 2: Segment retinal images into arteries and veins"""
     
     def __init__(
         self,
@@ -92,7 +91,7 @@ class SegmentationStep(ProcessingStep):
             self.logger.error(f"Error segmenting {image_path}: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def process_and_save_to_db(self, image_path: str, id: int) -> bool:
+    def process_and_save_to_db(self, image_path: str, id: int, extension: str) -> bool:
         """
         Process image and save results to database.
         
@@ -112,6 +111,7 @@ class SegmentationStep(ProcessingStep):
         # Save to database
         success = self.db_manager.save_segmentation_result(
             id=id,
+            extension=extension,
             vessel_folder=result["vessel_folder"],
             av_folder=result["av_folder"],
             model_name=self.segmentor.model_name,

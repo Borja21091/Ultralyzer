@@ -64,7 +64,7 @@ class OverlayLayer:
     def __init__(self, overlay_array: np.ndarray):
         """
         Args:
-            overlay_array: RGB uint8 numpy array (H, W, 3) with arteries in red, veins in blue
+            overlay_array: RGB uint8 numpy array (H, W, 3) with arteries in red, veins in blue and disc + fovea in green
         """
         self._overlay_array_original = overlay_array.copy() # Keep original for reset
         self._overlay_array = overlay_array  # RGB, kept for data persistence
@@ -88,7 +88,7 @@ class OverlayLayer:
     
     @channel.setter
     def channel(self, value: str):
-        """Set display channel: 'arteries', 'veins', 'both'"""
+        """Set display channel: 'arteries', 'veins', 'vessels', 'all'"""
         valid_channels = OVERLAY_MAP.keys()
         if value not in valid_channels:
             return
@@ -257,10 +257,14 @@ class OverlayLayer:
         """Convert QImage to filtered QPixmap - where filtering actually happens"""
         display_image = self._qimage.copy()
         
-        if self._channel == "arteries":
-            self._filter_channel(display_image, keep_red=True, keep_blue=False)
-        elif self._channel == "veins":
-            self._filter_channel(display_image, keep_red=False, keep_blue=True)
+        if self._channel == "red":
+            self._filter_channel(display_image, keep_red=True, keep_green=False, keep_blue=False)
+        elif self._channel == "blue":
+            self._filter_channel(display_image, keep_red=False, keep_green=False, keep_blue=True)
+        elif self._channel == "green":
+            self._filter_channel(display_image, keep_red=False, keep_green=True, keep_blue=False)
+        elif self._channel == "vessels":
+            self._filter_channel(display_image, keep_red=True, keep_green=False, keep_blue=True)
         # else: "both" - keep as is
         
         self._apply_opacity(display_image)
@@ -280,7 +284,7 @@ class OverlayLayer:
         # Scale alpha channel by opacity
         pixels[:, :, 3] = (pixels[:, :, 3] * self.opacity).astype(np.uint8)
     
-    def _filter_channel(self, qimage: QImage, keep_red: bool, keep_blue: bool):
+    def _filter_channel(self, qimage: QImage, keep_red: bool, keep_green: bool, keep_blue: bool):
         """Modify QImage to show only selected channels"""
         # Get writable buffer
         ptr = qimage.bits()
@@ -295,6 +299,8 @@ class OverlayLayer:
         # Zero out channels we don't want to keep
         if not keep_red:
             pixels[:, :, 2] = 0 # Red channel
+        if not keep_green:
+            pixels[:, :, 1] = 0 # Green channel
         if not keep_blue:
             pixels[:, :, 0] = 0 # Blue channel
         
@@ -307,17 +313,22 @@ class OverlayLayer:
         
         painter = QPainter(self._qimage)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         pen = painter.pen()
         pen.setWidth(2 * radius)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         
-        if self.channel == 'arteries':
+        if self.channel == 'red':
             pen.setColor(Qt.GlobalColor.red)
-        elif self.channel == 'veins':
+        elif self.channel == 'blue':
             pen.setColor(Qt.GlobalColor.blue)
-        elif self.channel == 'both':
+        elif self.channel == 'green':
+            pen.setColor(Qt.GlobalColor.green)
+        elif self.channel == 'vessels':
             pen.setColor(QColor(255, 0, 255))
+        elif self.channel == 'all':
+            pen.setColor(Qt.GlobalColor.white)
             
         painter.setPen(pen)
         painter.drawLine(int(points[0][0]), int(points[0][1]), int(points[1][0]), int(points[1][1]))
@@ -341,16 +352,22 @@ class OverlayLayer:
         # Apply selective channel erasing
         erase_area = mask > 0
         
-        if self.channel == "arteries":
+        if self.channel == "red":
             # Only erase red channel
             pixels[erase_area, 2] = 0
-        elif self.channel == "veins":
+        elif self.channel == "green":
+            # Only erase green channel
+            pixels[erase_area, 1] = 0
+        elif self.channel == "blue":
             # Only erase blue channel
             pixels[erase_area, 0] = 0
-        elif self.channel == "both":
+        elif self.channel == "vessels":
             # Erase both red and blue channels
             pixels[erase_area, 0] = 0  # Blue
             pixels[erase_area, 2] = 0  # Red
+        elif self.channel == "all":
+            # Erase all channels
+            pixels[erase_area, 0:3] = 0
         
         # Update alpha channel based on remaining visible channels
         pixels[erase_area, 3] = np.bitwise_or(np.bitwise_or(pixels[erase_area, 0], pixels[erase_area, 1]), pixels[erase_area, 2])
@@ -364,9 +381,9 @@ class OverlayLayer:
         
         # Determine target color based on channel (avoid repeated if checks)
         color_map = {
-            'both': (255, 255),      # Magenta: B=255, R=255
-            'arteries': (0, 255),    # Red: B=0, R=255
-            'veins': (255, 0)        # Blue: B=255, R=0
+            'vessels': (255, 255), # Magenta: B=255, R=255
+            'red': (0, 255), # Red: B=0, R=255
+            'blue': (255, 0) # Blue: B=255, R=0
         }
         
         if self.channel not in color_map:
@@ -390,15 +407,13 @@ class OverlayLayer:
         # Use cv2 for efficient line drawing (already imported)
         cv2.line(mask, (x0, y0), (x1, y1), 255, int(2 * radius), cv2.LINE_AA)
         
-        # Create combined mask: stroke AND non-black pixels
-        non_black = np.bitwise_or(np.bitwise_or(overlay_pixels[:, :, 0] > 0, overlay_pixels[:, :, 1] > 0),
-                                  overlay_pixels[:, :, 2] > 0)
-        paint_area = (mask > 0) & non_black
+        # Create combined mask: stroke AND vessels (red and blue channels) non-black pixels
+        vessel_non_black = np.bitwise_or(overlay_pixels[:, :, 0] > 0, overlay_pixels[:, :, 2] > 0)
+        paint_area = (mask > 0) & vessel_non_black
         
         # Apply color in one vectorized operation
         overlay_pixels[paint_area, 0] = b_val
         overlay_pixels[paint_area, 2] = r_val
-            
         
         # Update alpha channel only for modified pixels (batch operation)
         overlay_pixels[paint_area, 3] = 255
@@ -537,7 +552,7 @@ class Canvas(QGraphicsView):
         self.setFocus()
 
     def set_brush_channel(self, channel: str):
-        """Set the current brush channel: 'arteries' or 'veins'"""
+        """Set the current brush channel"""
         self.current_channel = channel
 
     def set_brush_radius(self, radius: float):

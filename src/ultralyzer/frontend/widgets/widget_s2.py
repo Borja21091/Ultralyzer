@@ -36,10 +36,11 @@ class BatchSegmentationWorker(QThread):
         
         for idx, meta in enumerate(self.metadata):
             try:
-                image_path = Path(meta.folder) / Path(meta.name)
+                image_path = Path(meta.folder) / Path(meta.name + meta.extension)
                 success = self.step_seg.process_and_save_to_db(
                     str(image_path),
-                    meta.id
+                    meta.id,
+                    meta.extension
                 )
                 
                 progress_pct = int((idx + 1) / total * 100)
@@ -310,8 +311,8 @@ class SegmentationWidget(BaseWidget):
         self.overlay_combo.setMinimumWidth(100)
         self.overlay_combo.setMaximumWidth(200)
         self.overlay_combo.setToolTip("Segmentation Overlay")
-        self.overlay_combo.addItems(["Arteries", "Veins", "Both", "None"])
-        self.overlay_combo.setCurrentText("Both")
+        self.overlay_combo.addItems(["Red", "Green", "Blue", "Vessels", "All", "None"])
+        self.overlay_combo.setCurrentText("All")
         self.overlay_combo.currentTextChanged.connect(self._on_overlay_channel_changed)
         combo_layout.addWidget(overlay_label)
         combo_layout.addWidget(self.overlay_combo)
@@ -570,13 +571,17 @@ class SegmentationWidget(BaseWidget):
         
         # Overlay shortcuts
         sc_a = QShortcut(QKeySequence("1"), self)
-        sc_a.activated.connect(lambda: self._set_overlay_by_key("arteries"))
+        sc_a.activated.connect(lambda: self._set_overlay_by_key("red"))
         sc_v = QShortcut(QKeySequence("2"), self)
-        sc_v.activated.connect(lambda: self._set_overlay_by_key("veins"))
+        sc_v.activated.connect(lambda: self._set_overlay_by_key("green"))
         sc_both = QShortcut(QKeySequence("3"), self)
-        sc_both.activated.connect(lambda: self._set_overlay_by_key("both"))
+        sc_both.activated.connect(lambda: self._set_overlay_by_key("blue"))
         sc_none = QShortcut(QKeySequence("4"), self)
-        sc_none.activated.connect(lambda: self._set_overlay_by_key("none"))
+        sc_none.activated.connect(lambda: self._set_overlay_by_key("vessels"))
+        sc_all = QShortcut(QKeySequence("5"), self)
+        sc_all.activated.connect(lambda: self._set_overlay_by_key("all"))
+        sc_no_overlay = QShortcut(QKeySequence("6"), self)
+        sc_no_overlay.activated.connect(lambda: self._set_overlay_by_key("none"))
         
         # Edit mode shortcuts
         sc_save = QShortcut(QKeySequence.StandardKey.Save, self)
@@ -894,7 +899,7 @@ class SegmentationWidget(BaseWidget):
                 progress_pct = int((idx + 1) / total * 100)
                 self._on_progress(progress_pct, f"Error: {str(e)}")
         
-        self._on_finished(True)
+        self._on_batch_finished(True)
         self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["finished"])
     
     def _on_start_segmentation(self):
@@ -910,7 +915,7 @@ class SegmentationWidget(BaseWidget):
         
         self.worker_thread = BatchSegmentationWorker(self.step_seg, pending)
         self.worker_thread.progress.connect(self._on_progress)
-        self.worker_thread.finished.connect(self._on_finished)
+        self.worker_thread.finished.connect(self._on_batch_finished)
         self.worker_thread.finished.connect(self._on_worker_finished)
         self.worker_thread.start()
     
@@ -959,11 +964,11 @@ class SegmentationWidget(BaseWidget):
         try:
             metadata = self.db_manager.get_metadata_by_filename(self.image_path.stem)
             self.worker_thread = SingleSegmentationWorker(self.step_seg, self.image_path, metadata.id)
-            self.worker_thread.finished.connect(self._on_finished)
+            self.worker_thread.finished.connect(self._on_single_finished)
             self.worker_thread.finished.connect(self._on_worker_finished)
             self.worker_thread.start()
             
-            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
         
         except Exception as e:
             self.status_text.emit(f"Error: {str(e)}")
@@ -979,11 +984,20 @@ class SegmentationWidget(BaseWidget):
         self.progress_bar.setValue(progress)
         self.status_text.emit(message)
     
-    def _on_finished(self, success: bool):
+    def _on_batch_finished(self, success: bool):
         """Handle completion"""
         self.btn_segment_all.setEnabled(True)
         self.status_text.emit("Complete!" if success else "Failed!")
         self.progress_bar.setValue(100 if success else 0)
+        
+    def _on_single_finished(self, success: bool):
+        """Handle single image segmentation completion"""
+        if success:
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["finished"])
+            self.status_text.emit(f"{self.image_path.name}: ✓")
+        else:
+            self.btn_segment_current.setStyleSheet(self.button_styles["segment"]["normal"])
+            self.status_text.emit(f"{self.image_path.name}: ✗")
     
     def _on_edit_mode_toggle(self):
         """Toggle edit mode on/off"""

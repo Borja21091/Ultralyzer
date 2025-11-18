@@ -44,10 +44,12 @@ IMAGE_CHANNEL_MAP = {
 
 # OVERLAY OPTIONS
 OVERLAY_MAP = {
-    "arteries": 0,
-    "veins": 1,
-    "both": 2,
-    "none": 3
+    "red": 0,
+    "green": 1,
+    "blue": 2,
+    "vessels": 3,
+    "all": 4,
+    "none": 5
 }
 
 # EDIT TOOLS

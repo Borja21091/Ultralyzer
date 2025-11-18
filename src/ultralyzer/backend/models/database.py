@@ -454,6 +454,7 @@ class DatabaseManager:
     def save_segmentation_result(
         self,
         id: int,
+        extension: str,
         vessel_folder: str,
         av_folder: str,
         model_name: str = "default_model",
@@ -488,6 +489,7 @@ class DatabaseManager:
                 # Create new
                 seg_result = SegmentationResult(
                     id=id,
+                    extension=extension,
                     name=session.query(QCResult).filter_by(id=id).first().name,
                     av_folder=av_folder,
                     vessel_folder=vessel_folder,
