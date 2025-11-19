@@ -35,7 +35,7 @@ class SegmentationStep(ProcessingStep):
         
         self.logger = logging.getLogger(self.__class__.__name__)
     
-    def process(self, image_path: str) -> Dict[str, Any]:
+    def process(self, image_path: str, extension: str = ".png") -> Dict[str, Any]:
         """
         Segment a single image.
         
@@ -56,12 +56,6 @@ class SegmentationStep(ProcessingStep):
             self.logger.info(f"Segmenting {Path(image_path).name}...")
             av_mask, vessel_mask = self.segmentor.segment(image)
 
-            # TODO: Improve segmentation by using vessel binary segmentation
-            if self.vessel_segmentor:
-                _, v_mask = self.vessel_segmentor.segment(image)
-                (self.output_dir / "binary").mkdir(parents=True, exist_ok=True)
-                Image.fromarray(v_mask * 255).save(str(self.output_dir / "binary" / f"{base_name}.png"))
-
             if self.disc_segmentor:
                 av_mask[:, :, 1] = self.disc_segmentor.segment(image)
             
@@ -75,8 +69,8 @@ class SegmentationStep(ProcessingStep):
             mask_path.mkdir(parents=True, exist_ok=True)
             av_folder = self.output_dir / "av"
             av_folder.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(vessel_mask).save(str(mask_path / f"{base_name}.png"))
-            Image.fromarray(av_mask).save(str(av_folder / f"{base_name}.png"))
+            Image.fromarray(vessel_mask).save(str(mask_path / (base_name + extension)))
+            Image.fromarray(av_mask).save(str(av_folder / (base_name + extension)))
 
             self.logger.info(f"Segmentation complete: {Path(image_path).name}")
             
@@ -102,7 +96,7 @@ class SegmentationStep(ProcessingStep):
         Returns:
             True if successful, False otherwise
         """
-        result = self.process(image_path)
+        result = self.process(image_path, extension)
         
         if not result["success"]:
             self.logger.error(f"Processing failed for {image_path}")
@@ -119,46 +113,6 @@ class SegmentationStep(ProcessingStep):
         )
         
         return success
-    
-    def process_batch(self, image_paths: list, qc_result_ids: list = None) -> Dict[str, Any]:
-        """
-        Process multiple images.
-        
-        Args:
-            image_paths: List of image file paths
-            qc_result_ids: Optional list of QC result IDs (for DB saving)
-            
-        Returns:
-            Dictionary with batch results
-        """
-        results = {
-            "total": len(image_paths),
-            "successful": 0,
-            "failed": 0,
-            "results": []
-        }
-        
-        for idx, image_path in enumerate(image_paths):
-            qc_id = qc_result_ids[idx] if qc_result_ids else None
-            
-            if qc_id:
-                success = self.process_and_save_to_db(image_path, qc_id)
-            else:
-                result = self.process(image_path)
-                success = result["success"]
-                results["results"].append(result)
-            
-            if success:
-                results["successful"] += 1
-            else:
-                results["failed"] += 1
-            
-            self.logger.info(
-                f"Batch progress: {idx + 1}/{len(image_paths)} "
-                f"({results['successful']} successful, {results['failed']} failed)"
-            )
-        
-        return results
     
     def get_pending_images(self):
         """Get all images that need segmentation"""

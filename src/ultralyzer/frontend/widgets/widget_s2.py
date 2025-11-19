@@ -40,7 +40,7 @@ class BatchSegmentationWorker(QThread):
                 success = self.step_seg.process_and_save_to_db(
                     str(image_path),
                     meta.id,
-                    meta.extension
+                    ".png"
                 )
                 
                 progress_pct = int((idx + 1) / total * 100)
@@ -70,7 +70,8 @@ class SingleSegmentationWorker(QThread):
         try:
             success = self.step_seg.process_and_save_to_db(
                 str(self.image_path),
-                self.id
+                self.id, 
+                ".png"
             )
             self.finished.emit(success)
         except Exception as e:
@@ -684,7 +685,7 @@ class SegmentationWidget(BaseWidget):
             self.canvas_color = "default"
         
         # Center the image on the canvas
-        self.canvas.centerOn(self.canvas.scene.itemsBoundingRect().center()) # Move to center
+        self.canvas.centerOn(self.canvas.scene().itemsBoundingRect().center()) # Move to center
         # self.canvas.fitInView(self.canvas.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio) # Move to center + scale to fit
         
         # Set channel and overlay
