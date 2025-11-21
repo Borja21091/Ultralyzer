@@ -2,7 +2,7 @@ from pathlib import Path
 from definitions import IMAGE_FORMATS
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox
+    QLabel, QFileDialog, QMessageBox, QComboBox
 )
 from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget

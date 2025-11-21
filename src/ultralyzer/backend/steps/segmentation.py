@@ -18,8 +18,8 @@ class SegmentationStep(ProcessingStep):
         output_dir: Path = None,
         disc_segmentor: Segmentor = None,
         fovea_segmentor: Segmentor = None,
-        vessel_segmentor: Segmentor = None
-    ):
+        vessel_segmentor: Segmentor = None):
+        
         super().__init__("Segmentation", 2)
         self.segmentor = segmentor
         self.disc_segmentor = disc_segmentor
@@ -54,31 +54,35 @@ class SegmentationStep(ProcessingStep):
             
             # Segment
             self.logger.info(f"Segmenting {Path(image_path).name}...")
-            av_mask, vessel_mask = self.segmentor.segment(image)
+            av_mask, _ = self.segmentor.segment(image)
 
             if self.disc_segmentor:
-                av_mask[:, :, 1] = self.disc_segmentor.segment(image)
+                disc_mask = self.disc_segmentor.segment(image)
+                av_mask[..., 1] = disc_mask
             
             if self.fovea_segmentor:
-                mask, loc = self.fovea_segmentor.segment(image)
-                av_mask[:, :, 1] = av_mask[:, :, 1] | mask
+                _, loc = self.fovea_segmentor.segment(image) # loc is (row, col) = (y, x)
+                
+            # Save fovea location to DB
+            if loc is not None:
+                name = Path(image_path).stem
+                metadata = self.db_manager.get_metadata_by_filename(name)
+                if metadata:
+                    id = metadata.id
+                    self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
             
             # Save masks
             base_name = Path(image_path).stem
-            mask_path = self.output_dir / "mask"
-            mask_path.mkdir(parents=True, exist_ok=True)
-            av_folder = self.output_dir / "av"
-            av_folder.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(vessel_mask).save(str(mask_path / (base_name + extension)))
-            Image.fromarray(av_mask).save(str(av_folder / (base_name + extension)))
+            seg_folder = Path(self.output_dir)
+            seg_folder.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(av_mask).save(str(seg_folder / (base_name + extension)))
 
             self.logger.info(f"Segmentation complete: {Path(image_path).name}")
             
             return {
                 "success": True,
                 "image_name": str(base_name),
-                "vessel_folder": str(mask_path),
-                "av_folder": str(av_folder)
+                "seg_folder": str(seg_folder)
             }
         
         except Exception as e:
@@ -106,8 +110,7 @@ class SegmentationStep(ProcessingStep):
         success = self.db_manager.save_segmentation_result(
             id=id,
             extension=extension,
-            vessel_folder=result["vessel_folder"],
-            av_folder=result["av_folder"],
+            seg_folder=result["seg_folder"],
             model_name=self.segmentor.model_name,
             model_version=self.segmentor.model_version
         )

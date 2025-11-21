@@ -1,9 +1,10 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Integer, Enum, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, String, DateTime, Integer, Enum, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from definitions import DB_DIR, IMAGE_FORMATS
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 import datetime as dt
 import enum
 import os
@@ -29,7 +30,7 @@ class MetaData(Base):
 
 class QCResult(Base):
     """Quality Control result for an image"""
-    __tablename__ = "qc_results"
+    __tablename__ = "QC"
 
     id = Column(Integer, ForeignKey("metadata.id"), primary_key=True, unique=True)
     name = Column(String, ForeignKey("metadata.name"), unique=True, nullable=False)
@@ -47,16 +48,15 @@ class QCResult(Base):
 
 class SegmentationResult(Base):
     """Segmentation result for an image"""
-    __tablename__ = "segmentation_results"
+    __tablename__ = "segmentation"
 
     id = Column(Integer, ForeignKey("metadata.id"), primary_key=True)
     extension = Column(String, nullable=False)
     name = Column(String, ForeignKey("metadata.name"),
                   unique=True, nullable=False)
     
-    # Mask paths
-    vessel_folder = Column(String, nullable=False)
-    av_folder = Column(String, nullable=False)
+    # Mask path
+    seg_folder = Column(String, nullable=False)
     
     # Metadata
     model_name = Column(String, default="dummy")
@@ -68,8 +68,82 @@ class SegmentationResult(Base):
     meta = relationship("MetaData", foreign_keys=[id])
     
     def __repr__(self):
-        return f"<SegmentationResult(name={self.name + self.extension}, av_folder={self.av_folder}, vessel_folder={self.vessel_folder})>"
+        return f"<SegmentationResult(name={self.name + self.extension}, seg_folder={self.seg_folder})>"
     
+
+class MetricsResult(Base):
+    """Metrics result for an image"""
+    __tablename__ = "metrics"
+
+    id = Column(Integer, ForeignKey("metadata.id"), primary_key=True)
+    name = Column(String, ForeignKey("metadata.name"),
+                  unique=True, nullable=False)
+    
+    # Metrics fields
+    # OPTIC DISC
+    disc_center_x = Column(Float, nullable=True)
+    disc_center_y = Column(Float, nullable=True)
+    disc_diameter_px = Column(Float, nullable=True)
+    disc_diameter_um = Column(Float, nullable=True)
+    disc_area_px = Column(Float, nullable=True)
+    disc_area_um = Column(Float, nullable=True)
+    disc_circularity = Column(Float, nullable=True)
+    disc_eccentricity = Column(Float, nullable=True)
+    # FOVEA
+    fovea_center_x = Column(Float, nullable=True)
+    fovea_center_y = Column(Float, nullable=True)
+    # OPTIC DISC - FOVEA RELATIONSHIP
+    disc_fovea_distance_px = Column(Float, nullable=True)
+    disc_fovea_distance_um = Column(Float, nullable=True)
+    disc_fovea_angle_deg = Column(Float, nullable=True)
+    # VESSELS
+    vessel_density = Column(Float, nullable=True)
+    vessel_tortuosity_density = Column(Float, nullable=True)
+    vessel_tortuosity_fft = Column(Float, nullable=True)
+    vessel_fractal_dimension_sandbox = Column(Float, nullable=True)
+    vessel_fractal_dimension_boxcount = Column(Float, nullable=True)
+    vessel_width_px = Column(Float, nullable=True)
+    vessel_width_um = Column(Float, nullable=True)
+    vessel_width_gradient = Column(Float, nullable=True)
+    # ARTERIES
+    crae = Column(Float, nullable=True)
+    a_density = Column(Float, nullable=True)
+    a_tortuosity_density = Column(Float, nullable=True)
+    a_tortuosity_fft = Column(Float, nullable=True)
+    a_fractal_dimension_sandbox = Column(Float, nullable=True)
+    a_fractal_dimension_boxcount = Column(Float, nullable=True)
+    a_width_px = Column(Float, nullable=True)
+    a_width_um = Column(Float, nullable=True)
+    a_width_gradient = Column(Float, nullable=True)
+    a_groups = Column(Float, nullable=True)
+    a_branching_points = Column(Float, nullable=True)
+    a_branches = Column(Float, nullable=True)
+    # VEINS
+    crve = Column(Float, nullable=True)
+    v_density = Column(Float, nullable=True)
+    v_tortuosity_density = Column(Float, nullable=True)
+    v_tortuosity_fft = Column(Float, nullable=True)
+    v_fractal_dimension_sandbox = Column(Float, nullable=True)
+    v_fractal_dimension_boxcount = Column(Float, nullable=True)
+    v_width_px = Column(Float, nullable=True)
+    v_width_um = Column(Float, nullable=True)
+    v_width_gradient = Column(Float, nullable=True)
+    v_groups = Column(Float, nullable=True)
+    v_branching_points = Column(Float, nullable=True)
+    v_branches = Column(Float, nullable=True)
+    # ARTERIES - VEINS RELATIONSHIP
+    av_ratio = Column(Float, nullable=True)
+    av_crossings = Column(Float, nullable=True)
+    av_arcade_concavity = Column(Float, nullable=True)
+    
+    timestamp = Column(DateTime, default=datetime.now(dt.timezone.utc))
+
+    # Relationship
+    meta = relationship("MetaData", foreign_keys=[id])
+    
+    def __repr__(self):
+        return f"<MetricsResult(name={self.name})>"
+
 
 class DatabaseManager:
     """Manages database connection and operations"""
@@ -334,7 +408,7 @@ class DatabaseManager:
     
     ############ SEGMENTATION GET METHODS ############
     
-    def get_segmentation_mask_path(self, name: str, mask_type: str = "av") -> Path:
+    def get_segmentation_mask_path(self, name: str) -> Path:
         """Get segmentation mask path for a specific image"""
         session = self.session
         try:
@@ -342,12 +416,7 @@ class DatabaseManager:
                 name=name
             ).first()
             if result:
-                if mask_type == "av":
-                    return Path(result.av_folder)
-                elif mask_type == "vessel":
-                    return Path(result.vessel_folder)
-                else:
-                    return None
+                return Path(result.seg_folder.value)
             else:
                 return None
         finally:
@@ -372,7 +441,7 @@ class DatabaseManager:
             session.close()
             return results
     
-    def get_segmentation_result(self, name: str) -> SegmentationResult:
+    def get_segmentation_by_filename(self, name: str) -> SegmentationResult:
         """Get segmentation result for a specific image"""
         session = self.session
         try:
@@ -401,7 +470,7 @@ class DatabaseManager:
     
     ############ SEGMENTATION SET METHODS ############
 
-    def set_mask_info(self, id: int, mask_path: Path, suffix: Path, mask_type: str = "av") -> bool:
+    def set_mask_info(self, id: int, mask_path: Path, suffix: Path) -> bool:
         """
         Set mask information for an image.
         
@@ -426,19 +495,12 @@ class DatabaseManager:
                     id=id,
                     extension=str(suffix).lower(),
                     name=meta.name,
-                    av_folder="",
-                    vessel_folder=""
+                    seg_folder=""
                 )
                 session.add(seg_result)
             
             # Update (now) existing entry
-            if mask_type == "av":
-                seg_result.av_folder = str(mask_path)
-            elif mask_type == "vessel":
-                seg_result.vessel_folder = str(mask_path)
-            else:
-                print(f"Error: Invalid mask type {mask_type}")
-                return False
+            seg_result.seg_folder = str(mask_path)
             
             session.commit()
             return True
@@ -455,18 +517,15 @@ class DatabaseManager:
         self,
         id: int,
         extension: str,
-        vessel_folder: str,
-        av_folder: str,
+        seg_folder: str,
         model_name: str = "default_model",
-        model_version: str = "1.0"
-    ) -> bool:
+        model_version: str = "1.0") -> bool:
         """
         Save segmentation result for an image.
         
         Args:
             qc_result_id: ID of the associated QC result
-            av_folder: Path to arteries and veins mask
-            vessel_folder: Path to vessel mask
+            seg_folder: Path to segmentation mask folder
             model_name: Name of the segmentation model
             model_version: Version of the segmentation model
             
@@ -480,8 +539,7 @@ class DatabaseManager:
             
             if existing:
                 # Update existing
-                existing.av_folder = av_folder
-                existing.vessel_folder = vessel_folder
+                existing.seg_folder = seg_folder
                 existing.model_name = model_name
                 existing.model_version = model_version
                 existing.timestamp = datetime.now(dt.timezone.utc)
@@ -491,8 +549,7 @@ class DatabaseManager:
                     id=id,
                     extension=extension,
                     name=session.query(QCResult).filter_by(id=id).first().name,
-                    av_folder=av_folder,
-                    vessel_folder=vessel_folder,
+                    seg_folder=seg_folder,
                     model_name=model_name,
                     model_version=model_version
                 )
@@ -509,5 +566,131 @@ class DatabaseManager:
         finally:
             session.close()
             
+    ############ METRICS GET METHODS ############
+    
+    def get_metrics_by_filename(self, name: str) -> MetricsResult | Any:
+        """Get metrics result for a specific image"""
+        session = self.session
+        try:
+            result = session.query(MetricsResult).filter_by(name=name).first()
+            if result:
+                return result
+            else:
+                return None
+        finally:
+            session.close()
+    
+    def get_fovea_by_filename(self, name: str) -> tuple[float, float] | Any:
+        """Get fovea metrics for a specific image"""
+        session = self.session
+        try:
+            result = session.query(MetricsResult).filter_by(name=name).first()
+            result = (result.fovea_center_x, result.fovea_center_y) if result else (None, None)
+            return result
+        finally:
+            session.close()
+    
+    ############ METRICS SET METHODS ############
+    
+    def save_metrics_by_id(
+        self,
+        id: int,
+        metrics: dict) -> bool:
+        """
+        Save metrics result for an image.
+        
+        Args:
+            id: ID of the associated metadata
+            metrics: Dictionary of metrics to save
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        session = self.session
+        try:
+            # Check if metrics already exists for this metadata
+            existing = session.query(MetricsResult).filter_by(id=id).first()
+            
+            if existing:
+                # Update existing
+                for key, value in metrics.items():
+                    if hasattr(existing, key):
+                        setattr(existing, key, value)
+                existing.timestamp = datetime.now(dt.timezone.utc)
+            else:
+                # Create new
+                meta = session.query(MetaData).filter_by(id=id).first()
+                if not meta:
+                    print(f"Error: No metadata found for ID {id}")
+                    return False
+                
+                metrics_result = MetricsResult(
+                    id=id,
+                    name=meta.name,
+                    **metrics
+                )
+                session.add(metrics_result)
+            
+            session.commit()
+            return True
+        
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving metrics result: {str(e)}")
+            return False
+        
+        finally:
+            session.close()
+    
+    def save_metrics_fovea_by_id(
+        self,
+        id: int,
+        fovea_x: float,
+        fovea_y: float) -> bool:
+        """
+        Save fovea metrics for an image.
+        
+        Args:
+            id: ID of the associated metadata
+            fovea_x: Fovea center x coordinate
+            fovea_y: Fovea center y coordinate
+        Returns:
+            True if successful, False otherwise
+        """
+        session = self.session
+        try:
+            # Check if metrics already exists for this metadata
+            existing = session.query(MetricsResult).filter_by(id=id).first()
+            
+            if existing:
+                # Update existing
+                existing.fovea_center_x = fovea_x
+                existing.fovea_center_y = fovea_y
+                existing.timestamp = datetime.now(dt.timezone.utc)
+            else:
+                # Create new
+                meta = session.query(MetaData).filter_by(id=id).first()
+                if not meta:
+                    print(f"Error: No metadata found for ID {id}")
+                    return False
+                
+                metrics_result = MetricsResult(
+                    id=id,
+                    name=meta.name,
+                    fovea_center_x=fovea_x,
+                    fovea_center_y=fovea_y
+                )
+                session.add(metrics_result)
+            
+            session.commit()
+            return True
+        
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving fovea metrics: {str(e)}")
+            return False
+        
+        finally:
+            session.close()
     
     
