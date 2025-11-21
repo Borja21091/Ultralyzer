@@ -604,6 +604,18 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def get_optic_disc_by_filename(self, name: str) -> tuple[float, float, float] | Any:
+        """Get optic disc coordinates and diameter for a specific image"""
+        session = self.session
+        try:
+            result = session.query(MetricsResult).filter_by(name=name).first()
+            if result:
+                return (result.disc_center_x, result.disc_center_y, result.disc_diameter_px)
+            else:
+                return (None, None, None)
+        finally:
+            session.close()
+    
     def get_pending_metrics(self) -> list:
         """Get QC results that need segmentation (PASS or BORDERLINE)"""
         session = self.session

@@ -24,7 +24,9 @@ class ArcadeDetector(object):
         self.eye = self.db_manager.get_laterality_by_filename(self.name)
         
         # Optic disc
-        # TODO: Retrieve coordinates and radius/diameter from DB
+        self.disc_x, self.disc_y, self.disc_diameter = self.db_manager.get_optic_disc_by_filename(self.name)
+        # Calculate radius from diameter
+        self.disc_radius = self.disc_diameter / 2 if self.disc_diameter is not None else None
         
         # Convert to 2D if image has more than 2 dimensions
         if len(self.mask.shape) > 2:
@@ -409,7 +411,7 @@ class ArcadeRANSAC(ArcadeDetector):
 
 
 class ArcadeAnalyzer(ArcadeDetector):
-    
+    pass
 
             
 def vessel_pixel_coordinates(mask):
