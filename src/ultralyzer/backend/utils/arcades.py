@@ -20,17 +20,29 @@ class ArcadeDetector(object):
         self.mask = mask
         self.db_manager = db_manager or DatabaseManager()
         
-        # Laterality
-        self.eye = self.db_manager.get_laterality_by_filename(self.name)
-        
-        # Optic disc
-        self.disc_x, self.disc_y, self.disc_diameter = self.db_manager.get_optic_disc_by_filename(self.name)
-        # Calculate radius from diameter
-        self.disc_radius = self.disc_diameter / 2 if self.disc_diameter is not None else None
-        
         # Convert to 2D if image has more than 2 dimensions
         if len(self.mask.shape) > 2:
             self.mask = cv2.cvtColor(self.mask, cv2.COLOR_BGR2GRAY)
+        
+    @property
+    def metrics(self):
+        return self.db_manager.get_metrics_by_filename(self.name)
+        
+    @property
+    def eye(self):
+        return self.metrics.laterality if self.metrics else None
+    
+    @property
+    def disc_x(self):
+        return self.metrics.optic_disc_x if self.metrics else None
+    
+    @property
+    def disc_y(self):
+        return self.metrics.optic_disc_y if self.metrics else None
+    
+    @property
+    def disc_diameter(self):
+        return self.metrics.optic_disc_diameter_px if self.metrics else None
     
     def view(self):
         plt.imshow(self.mask, cmap="gray")
