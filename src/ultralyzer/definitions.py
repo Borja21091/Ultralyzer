@@ -60,6 +60,8 @@ EDIT_TOOLS = {
 
 # METRICS
 METRIC_DICTIONARY = {
+    # GENERAL
+    "laterality" : "Image eye laterality (left/right)",
     # OPTIC DISC
     "disc_center_x" : "X coordinate of optic disc center",
     "disc_center_y" : "Y coordinate of optic disc center",

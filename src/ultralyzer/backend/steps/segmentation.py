@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 import logging
 
+from backend.utils.preprocessing import localise_centre_mass
 from backend.models.database import DatabaseManager
 from backend.steps.base_step import ProcessingStep
 from backend.models.segmentor import Segmentor
@@ -49,6 +50,10 @@ class SegmentationStep(ProcessingStep):
             return {"success": False, "error": "Invalid input"}
         
         try:
+            name = Path(image_path).stem
+            metadata = self.db_manager.get_metadata_by_filename(name)
+            id = metadata.id if metadata else None
+            
             # Load image
             image = np.array(Image.open(image_path).convert("RGB"))
             
@@ -58,18 +63,23 @@ class SegmentationStep(ProcessingStep):
 
             if self.disc_segmentor:
                 disc_mask = self.disc_segmentor.segment(image)
-                av_mask[..., 1] = disc_mask
+                # Save disc centroid to DB
+                if any(disc_mask.flatten()) and metadata:
+                    disc_cy, disc_cx = localise_centre_mass(disc_mask)
+                    self.db_manager.save_metrics_disc_centroid_by_id(id, disc_cx, disc_cy)
+                    av_mask[..., 1] = disc_mask
             
             if self.fovea_segmentor:
                 _, loc = self.fovea_segmentor.segment(image) # loc is (row, col) = (y, x)
-                
-            # Save fovea location to DB
-            if loc is not None:
-                name = Path(image_path).stem
-                metadata = self.db_manager.get_metadata_by_filename(name)
-                if metadata:
+                # Save fovea location to DB
+                if loc is not None and metadata:
                     id = metadata.id
                     self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
+                    
+            if disc_cx and loc is not None:
+                laterality = "left" if loc[1] < disc_cx else "right"
+                if metadata:
+                    self.db_manager.save_metrics_laterality_by_id(id, laterality)
             
             # Save masks
             base_name = Path(image_path).stem
