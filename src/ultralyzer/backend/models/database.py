@@ -80,6 +80,8 @@ class MetricsResult(Base):
                   unique=True, nullable=False)
     
     # Metrics fields
+    # GENERAL
+    laterality = Column(String, nullable=True)
     # OPTIC DISC
     disc_center_x = Column(Float, nullable=True)
     disc_center_y = Column(Float, nullable=True)
@@ -590,6 +592,44 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def get_laterality_by_filename(self, name: str) -> str | Any:
+        """Get laterality metric for a specific image"""
+        session = self.session
+        try:
+            result = session.query(MetricsResult).filter_by(name=name).first()
+            if result:
+                return result.laterality
+            else:
+                return None
+        finally:
+            session.close()
+    
+    def get_optic_disc_by_filename(self, name: str) -> tuple[float, float, float] | Any:
+        """Get optic disc coordinates and diameter for a specific image"""
+        session = self.session
+        try:
+            result = session.query(MetricsResult).filter_by(name=name).first()
+            if result:
+                return (result.disc_center_x, result.disc_center_y, result.disc_diameter_px)
+            else:
+                return (None, None, None)
+        finally:
+            session.close()
+    
+    def get_pending_metrics(self) -> list:
+        """Get QC results that need segmentation (PASS or BORDERLINE)"""
+        session = self.session
+        results = []
+        try:
+            results = session.query(MetaData).join(
+                QCResult, MetaData.id == QCResult.id
+            ).filter(
+                QCResult.decision.in_([QCDecisionEnum.PASS, QCDecisionEnum.BORDERLINE])
+            ).all()
+        finally:
+            session.close()
+            return results
+    
     ############ METRICS SET METHODS ############
     
     def save_metrics_by_id(
@@ -642,6 +682,57 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def save_metrics_disc_centroid_by_id(
+        self,
+        id: int,
+        disc_x: float,
+        disc_y: float) -> bool:
+        """
+        Save optic disc centroid metrics for an image.
+        
+        Args:
+            id: ID of the associated metadata
+            disc_x: Optic disc center x coordinate
+            disc_y: Optic disc center y coordinate
+        Returns:
+            True if successful, False otherwise
+        """
+        session = self.session
+        try:
+            # Check if metrics already exists for this metadata
+            existing = session.query(MetricsResult).filter_by(id=id).first()
+            
+            if existing:
+                # Update existing
+                existing.disc_center_x = disc_x
+                existing.disc_center_y = disc_y
+                existing.timestamp = datetime.now(dt.timezone.utc)
+            else:
+                # Create new
+                meta = session.query(MetaData).filter_by(id=id).first()
+                if not meta:
+                    print(f"Error: No metadata found for ID {id}")
+                    return False
+                
+                metrics_result = MetricsResult(
+                    id=id,
+                    name=meta.name,
+                    disc_center_x=disc_x,
+                    disc_center_y=disc_y
+                )
+                session.add(metrics_result)
+            
+            session.commit()
+            return True
+        
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving disc centroid metrics: {str(e)}")
+            return False
+        
+        finally:
+            session.close()
+        
     def save_metrics_fovea_by_id(
         self,
         id: int,
@@ -690,6 +781,107 @@ class DatabaseManager:
             print(f"Error saving fovea metrics: {str(e)}")
             return False
         
+        finally:
+            session.close()
+    
+    def save_metrics_fovea_by_name(
+        self,
+        name: str,
+        fovea_x: float,
+        fovea_y: float) -> bool:
+        """
+        Save fovea metrics for an image by name.
+        
+        Args:
+            name: Name of the image
+            fovea_x: Fovea center x coordinate
+            fovea_y: Fovea center y coordinate
+        Returns:
+            True if successful, False otherwise
+        """
+        session = self.session
+        try:
+            # Check if metrics already exists for this metadata
+            existing = session.query(MetricsResult).filter_by(name=name).first()
+            
+            if existing:
+                # Update existing
+                existing.fovea_center_x = fovea_x
+                existing.fovea_center_y = fovea_y
+                existing.timestamp = datetime.now(dt.timezone.utc)
+            else:
+                # Create new
+                meta = session.query(MetaData).filter_by(name=name).first()
+                if not meta:
+                    print(f"Error: No metadata found for name {name}")
+                    return False
+                
+                metrics_result = MetricsResult(
+                    id=meta.id,
+                    name=name,
+                    fovea_center_x=fovea_x,
+                    fovea_center_y=fovea_y
+                )
+                session.add(metrics_result)
+            
+            session.commit()
+            return True
+        
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving fovea metrics: {str(e)}")
+            return False
+        
+        finally:
+            session.close()
+    
+    def save_metrics_laterality_by_id(
+        self,
+        id: int,
+        laterality: str) -> bool:
+        """
+        Save laterality metric for an image.
+        
+        Args:
+            id: ID of the associated metadata
+            laterality: Laterality value ('left' or 'right')
+        Returns:
+            True if successful, False otherwise
+        """
+        # Check if laterality is valid
+        if laterality not in ['left', 'right']:
+            print(f"Error: Invalid laterality value '{laterality}' for ID {id}")
+            return False
+        
+        session = self.session
+        try:
+            # Check if metrics already exists for this metadata
+            existing = session.query(MetricsResult).filter_by(id=id).first()
+            
+            if existing:
+                # Update existing
+                existing.laterality = laterality
+                existing.timestamp = datetime.now(dt.timezone.utc)
+            else:
+                # Create new
+                meta = session.query(MetaData).filter_by(id=id).first()
+                if not meta:
+                    print(f"Error: No metadata found for ID {id}")
+                    return False
+                
+                metrics_result = MetricsResult(
+                    id=id,
+                    name=meta.name,
+                    laterality=laterality
+                )
+                session.add(metrics_result)
+            
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving laterality metric: {str(e)}")
+            return False
         finally:
             session.close()
     

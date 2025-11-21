@@ -423,7 +423,7 @@ class ArcadeRANSAC(ArcadeDetector):
 
 
 class ArcadeAnalyzer(ArcadeDetector):
-    
+    pass
 
             
 def vessel_pixel_coordinates(mask):

@@ -1,5 +1,5 @@
-from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QPen
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QPen, QColor, QBrush
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem
 from frontend.models.edit_commands import BrushStrokeCommand, EraseCommand, ColorSwitchCommand, SmartPaintCommand
 from PySide6.QtCore import Qt, Signal
 import numpy as np
@@ -693,6 +693,7 @@ class Canvas(QGraphicsView):
     """Main canvas for displaying and editing image layers"""
     
     signal_zoom_changed = Signal()
+    signal_fovea_selected = Signal(float, float)  # x, y coordinates of fovea selection
     
     def __init__(self, image_layer: ImageLayer, overlay_layer: OverlayLayer):
         super().__init__()
@@ -713,6 +714,15 @@ class Canvas(QGraphicsView):
         
         # Position overlay on top of image
         self.overlay_item.setPos(0, 0)
+        
+        # Create fovea marker (hidden by default)
+        self.fovea_item = QGraphicsEllipseItem(0, 0, 20, 20) # 20px diameter
+        color = QColor(67, 220, 250)
+        self.fovea_item.setPen(QPen(color, 2))
+        self.fovea_item.setBrush(QBrush(color))
+        self.fovea_item.setZValue(10) # Ensure it's on top
+        self.fovea_item.setVisible(False)
+        self._scene.addItem(self.fovea_item)
         
         self._edit_mode = False
         
@@ -749,7 +759,7 @@ class Canvas(QGraphicsView):
         self._edit_mode = enabled
     
     def set_tool(self, tool: str):
-        """Set the current tool: 'brush', 'smart_paint', 'eraser' or 'change'"""
+        """Set the current tool: 'brush', 'smart_paint', 'eraser', 'change' or 'fovea_location'"""
         self.current_tool = tool
         if tool and tool.lower() in ['brush', 'smart_paint']:
             self.set_brush_channel(self.get_overlay_channel())
@@ -827,6 +837,18 @@ class Canvas(QGraphicsView):
         # Reset tool state
         self.current_tool = None
         self.stroke_points = []
+
+    def update_fovea(self, x: float, y: float):
+        """Update fovea marker position"""
+        if x is not None and y is not None:
+            # Center the 20x20 circle on the coordinates
+            self.fovea_item.setRect(x - 10, y - 10, 20, 20)
+            self.set_fovea_visibility(True)
+            self.signal_fovea_selected.emit(x, y)
+    
+    def set_fovea_visibility(self, visible: bool):
+        """Set fovea marker visibility"""
+        self.fovea_item.setVisible(visible)
     
     ################ PRIVATE METHODS ################
     
@@ -887,6 +909,11 @@ class Canvas(QGraphicsView):
                                         int(pos.x()), int(pos.y()))
             self.overlay_layer._undo_stack.push(command)
             self.update_overlay_display()
+            return
+        
+        # Handle fovea location tool (single click, no stroke)
+        if self.current_tool == "fovea_location":
+            self.update_fovea(pos.x(), pos.y())
             return
         
         self.stroke_points = [(pos.x(), pos.y())]

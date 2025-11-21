@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QGraphicsView, 
     QProgressBar, QComboBox, QSlider, QSplitter, 
-    QLabel, QMessageBox, QWidget, QTextEdit
+    QLabel, QMessageBox, QWidget, QTextEdit, QCheckBox
 )
 from backend.steps.metrics import MetricsStep
 from PySide6.QtCore import Qt, Signal, QThread
@@ -76,6 +76,40 @@ class SingleSegmentationWorker(QThread):
             self.finished.emit(success)
         except Exception as e:
             self.finished.emit(False)
+
+
+class BatchMetricsWorker(QThread):
+    """Worker thread for batch metrics calculation"""
+    
+    progress = Signal(int, str)
+    finished = Signal(bool)
+    
+    def __init__(self, step_metrics: MetricsStep, metadata: list):
+        super().__init__()
+        self.step_metrics = step_metrics
+        self.metadata = metadata
+    
+    def run(self):
+        """Run metrics calculation batch"""
+        total = len(self.metadata)
+        
+        for idx, meta in enumerate(self.metadata):
+            try:
+                image_path = Path(meta.folder) / Path(meta.name + meta.extension)
+                success = self.step_metrics.process_and_save_to_db(
+                    str(image_path),
+                    meta.id
+                )
+                
+                progress_pct = int((idx + 1) / total * 100)
+                msg = f"{meta.name}: {'✓' if success else '✗'}"
+                self.progress.emit(progress_pct, msg)
+            
+            except Exception as e:
+                progress_pct = int((idx + 1) / total * 100)
+                self.progress.emit(progress_pct, f"Error: {str(e)}")
+        
+        self.finished.emit(True)
 
 
 class SingleMetricsWorker(QThread):
@@ -174,7 +208,10 @@ class SegmentationWidget(BaseWidget):
             # Deselect tool
             self._active_tool = None
             self.btn_brush.setChecked(False)
+            self.btn_smart_paint.setChecked(False)
             self.btn_eraser.setChecked(False)
+            self.btn_change.setChecked(False)
+            self.btn_fovea_location.setChecked(False)
             self.canvas.set_tool(None)
             self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
         else:
@@ -184,6 +221,7 @@ class SegmentationWidget(BaseWidget):
             self.btn_smart_paint.setChecked(tool == "smart_paint")
             self.btn_eraser.setChecked(tool == "eraser")
             self.btn_change.setChecked(tool == "change")
+            self.btn_fovea_location.setChecked(tool == "fovea_location")
             self.canvas.set_tool(tool)
             if tool in ["brush", "smart_paint", "eraser"]:
                 cursor = self._create_brush_cursor(self.brush_size // 2)
@@ -339,6 +377,12 @@ class SegmentationWidget(BaseWidget):
         combo_layout.addWidget(overlay_label)
         combo_layout.addWidget(self.overlay_combo)
         
+        # Add Fovea Checkbox
+        self.chk_fovea = QCheckBox("Show Fovea")
+        self.chk_fovea.setChecked(False)
+        self.chk_fovea.toggled.connect(self._on_toggle_fovea)
+        combo_layout.addWidget(self.chk_fovea)
+        
         display_layout.addLayout(combo_layout)
         display_layout.addSpacing(15)
         
@@ -442,7 +486,7 @@ class SegmentationWidget(BaseWidget):
         self.btn_segment_all = QPushButton("⏩ Segment All")
         self.btn_segment_all.setMinimumHeight(40)
         self.btn_segment_all.setStyleSheet(button_styles["segment"]["normal"])
-        self.btn_segment_all.clicked.connect(self._on_start_segmentation)
+        self.btn_segment_all.clicked.connect(self._on_segment_all)
         right_layout.addWidget(self.btn_segment_all)
         
         self.btn_metrics_all = QPushButton("📊 Metrics All")
@@ -524,13 +568,21 @@ class SegmentationWidget(BaseWidget):
         self.btn_eraser.clicked.connect(lambda: self._set_active_tool("eraser"))
         toolbar_layout.addWidget(self.btn_eraser)
         
-        # Color change tool
+        # Change color tool
         self.btn_change = QPushButton("⇄")
         self.btn_change.setToolTip("Change Color - Switch artery/vein (Ctrl/Cmd+C)")
         self.btn_change.setMaximumWidth(80)
         self.btn_change.setCheckable(True)
         self.btn_change.clicked.connect(lambda: self._set_active_tool("change"))
         toolbar_layout.addWidget(self.btn_change)
+        
+        # Fovea location button
+        self.btn_fovea_location = QPushButton("🎯")
+        self.btn_fovea_location.setToolTip("Edit Fovea Location")
+        self.btn_fovea_location.setMaximumWidth(80)
+        self.btn_fovea_location.setCheckable(True)
+        self.btn_fovea_location.clicked.connect(lambda: self._set_active_tool("fovea_location"))
+        toolbar_layout.addWidget(self.btn_fovea_location)
         
         toolbar_layout.addSpacing(10)
         
@@ -660,7 +712,7 @@ class SegmentationWidget(BaseWidget):
         self.active_tool = tool
         if tool in ["brush", "smart_paint", "eraser"]:
             self._update_brush_cursor()
-        elif tool == "change":
+        elif tool in ["change", "fovea_location"]:
             self.canvas.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
@@ -709,6 +761,15 @@ class SegmentationWidget(BaseWidget):
             # Update canvas contents instead of recreating
             self.canvas.reset_layers(image_layer, overlay_layer)
         self.canvas.signal_zoom_changed.connect(self._update_brush_cursor)
+        self.canvas.signal_fovea_selected.connect(self._on_fovea_location_selected)
+        
+        # Update fovea marker
+        fovea_coords = self.db_manager.get_fovea_by_filename(name)
+        if fovea_coords and fovea_coords[0] is not None:
+            self.canvas.update_fovea(fovea_coords[0], fovea_coords[1])
+            self.canvas.set_fovea_visibility(self.chk_fovea.isChecked())
+        else:
+            self.canvas.set_fovea_visibility(False)
         
         # Set canvas edge color
         try:
@@ -904,7 +965,7 @@ class SegmentationWidget(BaseWidget):
         """Refresh image display"""
         self._display_new_image()
     
-    def _on_start_segmentation(self):
+    def _on_segment_all(self):
         """Start segmentation"""
         pending = self.step_seg.get_pending_images()
         
@@ -914,12 +975,19 @@ class SegmentationWidget(BaseWidget):
         
         self.status_text.emit(f"Segmenting {len(pending)} images...")
         self.btn_segment_all.setEnabled(False)
+        self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["highlighted"])
         
-        self.worker_thread = BatchSegmentationWorker(self.step_seg, pending)
-        self.worker_thread.progress.connect(self._on_progress)
-        self.worker_thread.finished.connect(self._on_batch_finished)
-        self.worker_thread.finished.connect(lambda x: self._on_worker_finished(self.worker_thread))
-        self.worker_thread.start()
+        try:
+            self.worker_thread = BatchSegmentationWorker(self.step_seg, pending)
+            self.worker_thread.progress.connect(self._on_progress)
+            self.worker_thread.finished.connect(self._on_batch_segment_finished)
+            self.worker_thread.finished.connect(lambda x: self._on_worker_finished(self.worker_thread))
+            self.worker_thread.start()
+        except Exception as e:
+            self.status_text.emit(f"Error: {str(e)}")
+            self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["normal"])
+        finally:
+            self.btn_segment_all.setEnabled(True)
     
     def _on_segment_current_image(self):
         """Segment only the currently displayed image"""
@@ -949,13 +1017,9 @@ class SegmentationWidget(BaseWidget):
             # Reload image to show updated segmentation
             self._display_new_image()
     
-    def _on_progress(self, progress: int, message: str):
-        """Handle progress"""
-        self.progress_bar.setValue(progress)
-        self.status_text.emit(message)
-    
-    def _on_batch_finished(self, success: bool):
+    def _on_batch_segment_finished(self, success: bool):
         """Handle completion"""
+        self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["finished"] if success else self.button_styles["segment"]["normal"])
         self.btn_segment_all.setEnabled(True)
         self.status_text.emit("Complete!" if success else "Failed!")
         self.progress_bar.setValue(100 if success else 0)
@@ -997,7 +1061,7 @@ class SegmentationWidget(BaseWidget):
             self.btn_next.setEnabled(False)
             self.btn_prev.setEnabled(False)
             self.canvas.setDragMode(QGraphicsView.DragMode.NoDrag)
-
+    
     def _on_brush_size_changed(self, size: int):
         """Handle brush size slider change"""
         self._brush_size = size
@@ -1101,6 +1165,56 @@ class SegmentationWidget(BaseWidget):
             self.status_text.emit(f"{self.image_path.name}: Metrics calculation failed ✗")
     
     def _on_calculate_metrics_all(self):
-        """Calculate metrics for all images"""
-        self.status_text.emit("Calculating metrics for all images... (Not implemented)")
+        """Calculate metrics for pending images"""
+        pending = self.step_metrics.get_pending_images()
+        
+        if not pending:
+            self.status_text.emit(("No images to calculate metrics for"))
+            return
+        
+        self.status_text.emit(f"Calculating metrics for {len(pending)} images...")
+        self.btn_metrics_all.setEnabled(False)
+        self.btn_metrics_all.setStyleSheet(self.button_styles["segment"]["highlighted"])
+        
+        try:
+            self.worker_thread = BatchMetricsWorker(self.step_metrics, pending)
+            self.worker_thread.progress.connect(self._on_progress)
+            self.worker_thread.finished.connect(self._on_batch_metrics_finished)
+            self.worker_thread.finished.connect(lambda x: self._on_worker_finished(self.worker_thread))
+            self.worker_thread.start()
+        except Exception as e:
+            self.status_text.emit(f"Error: {str(e)}")
+            self.btn_metrics_all.setStyleSheet(self.button_styles["segment"]["normal"])
+        finally:
+            self.btn_metrics_all.setEnabled(True)
+    
+    def _on_progress(self, progress: int, message: str):
+        """Handle metrics calculation progress"""
+        self.progress_bar.setValue(progress)
+        self.status_text.emit(message)
+    
+    def _on_batch_metrics_finished(self, success: bool):
+        """Handle completion of batch metrics calculation"""
+        self.btn_metrics_all.setStyleSheet(self.button_styles["segment"]["finished"] if success else self.button_styles["segment"]["normal"])
+        self.btn_metrics_all.setEnabled(True)
+        self.status_text.emit("Metrics calculation complete!" if success else "Metrics calculation failed!")
+        self.progress_bar.setValue(100 if success else 0)
+    
+    def _on_toggle_fovea(self, checked: bool):
+        """Toggle fovea visibility on canvas"""
+        if self.canvas:
+            self.canvas.set_fovea_visibility(checked)
+    
+    def _on_fovea_location_selected(self, x: int, y: int):
+        """Handle fovea location selection"""
+        if not self.image_paths:
+            return
+        
+        name = self.image_path.stem
+        
+        try:
+            self.db_manager.save_metrics_fovea_by_name(name, x, y)
+            self.status_text.emit(f"Fovea location saved at ({x}, {y}) for {name}")
+        except Exception as e:
+            self.status_text.emit(f"Error saving fovea location: {e}")
     

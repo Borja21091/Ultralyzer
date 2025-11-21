@@ -1,4 +1,5 @@
 
+from skimage.morphology import skeletonize
 from skimage.measure import regionprops, label
 from definitions import METRIC_DICTIONARY
 from typing import Dict, Any
@@ -95,7 +96,7 @@ class MetricsStep(ProcessingStep):
                     # TODO: Call MEX function to convert pixels to microns
                     pass
                 else:
-                    self.logger.warning("Micron conversion MEX file not provided or not found. Skipping optic disc micron metrics.")
+                    self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping optic disc micron metrics for {name}.")
             
             # Get fovea center from database
             fovea_center_x, fovea_center_y = self.db_manager.get_fovea_by_filename(name)
@@ -109,8 +110,8 @@ class MetricsStep(ProcessingStep):
                         (metrics["disc_center_x"] - fovea_center_x) ** 2 +
                         (metrics["disc_center_y"] - fovea_center_y) ** 2
                     )
-                    metrics["od_fovea_distance_px"] = float(od_fovea_distance)
-                    metrics["od_fovea_angle_deg"] = float(np.degrees(np.arctan(
+                    metrics["disc_fovea_distance_px"] = float(od_fovea_distance)
+                    metrics["disc_fovea_angle_deg"] = float(np.degrees(np.arctan(
                         (fovea_center_y - metrics["disc_center_y"]) /
                         (fovea_center_x - metrics["disc_center_x"] + 1e-6)
                     )))
@@ -118,8 +119,15 @@ class MetricsStep(ProcessingStep):
                     if self.mex_flag:
                         pass
                     else:
-                        self.logger.warning("Micron conversion MEX file not provided or not found. Skipping OD-Fovea micron metrics.")
-                        
+                        self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping OD-Fovea micron metrics for {name}.")
+            else:
+                self.logger.warning(f"Fovea location not found in database for {name}. Please identify the Fovea using the 'Edit mask' tool and re-run metric calculation. Skipping OD-Fovea metrics for now.")
+            
+            # Laterality
+            if fovea_center_x and (not np.isnan(metrics["disc_center_x"]) or metrics["disc_center_x"] is not None):
+                laterality = "left" if fovea_center_x < metrics["disc_center_x"] else "right"
+                metrics["laterality"] = laterality
+            
             # Vessel / Artery / Vein metrics
             masks = [self.vessel_mask, self.a_mask, self.v_mask]
             for mask, prefix in zip(masks, ["vessel", "a", "v"]):
@@ -127,7 +135,48 @@ class MetricsStep(ProcessingStep):
                     type = "vessels" if prefix == "vessel" else ("arteries" if prefix == "a" else "veins")
                     self.logger.warning(f"No {type} detected in {name}. Skipping {type} metrics.")
                     continue
+                
+                # Density
                 metrics[f"{prefix}_density"] = float(np.sum(mask) / mask.size)
+                
+                # Tortuosity Density
+                
+                # Tortuosity FFT
+                
+                # Fractal Dimension (Sandbox and Boxcount)
+                
+                # Average Width
+                
+                # Width Gradient
+                
+            # Artery/Vein CRAE/CRVE, groups, branching points, branches
+            for mask, prefix in zip([self.a_mask, self.v_mask], ["a", "v"]):
+                if not mask.any():
+                    type = "arteries" if prefix == "a" else "veins"
+                    self.logger.warning(f"No {type} detected in {name}. Skipping {type} CRAE/CRVE and branching metrics.")
+                    continue
+                    
+                # CRAE/CRVE
+                
+                # Groups
+                
+                # Branching Points
+                
+                # Branches
+                
+            # Artery - Vein Relationship metrics
+            if not self.a_mask.any() or not self.v_mask.any():
+                self.logger.warning(f"Insufficient artery/vein data in {name}. Skipping artery-vein relationship metrics.")
+            else:
+                # AV Ratio
+                metrics["av_ratio"] = metrics["a_density"] / metrics["v_density"] if metrics["v_density"] > 0 else float('nan')
+                
+                # AV Crossings
+                artery_skeleton = skeletonize(self.a_mask)
+                vein_skeleton = skeletonize(self.v_mask)
+                metrics["av_crossings"] = float(np.sum(artery_skeleton & vein_skeleton))
+                
+                # AV Arcade Concavity
             
             return {"success": True, "metrics": metrics}
         
@@ -166,3 +215,10 @@ class MetricsStep(ProcessingStep):
             return False
         
         return True
+    
+    def get_pending_images(self):
+        """Get all images that need segmentation"""
+        metadata = self.db_manager.get_pending_metrics()
+        return sorted(metadata, key=lambda x: x.name)
+    
+    
