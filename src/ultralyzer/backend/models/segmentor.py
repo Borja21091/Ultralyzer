@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from PIL import Image
-from typing import Tuple
+from typing import Tuple, Any
 from torchvision import tv_tensors
 from abc import ABC, abstractmethod
 from pathlib import Path, PosixPath, PurePath
@@ -31,15 +31,12 @@ class Segmentor(ABC):
         self.model_version = model_version
     
     @abstractmethod
-    def segment(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def segment(self, image: np.ndarray) -> Any:
         """
-        Segment an image into arteries and veins.
+        Segment an image.
         
         Args:
             image: Input image (H, W, 3) as numpy array
-            
-        Returns:
-            Tuple of (arteries_mask, veins_mask) as uint8 numpy arrays
         """
         pass
     
@@ -190,7 +187,7 @@ class UnetSegmentor(Segmentor):
         imout[:, t:b, l:r] = self._segment(image[t:b, l:r, :], 
                               patchsize=self.patchsize, 
                               use_softmax=True)
-    
+
         vessel_mask, cmap = find_vessels(imout)
 
         return cmap, vessel_mask
@@ -574,8 +571,8 @@ class UWFDiscSegmentor(Segmentor):
         output = np.zeros_like(image[:, :, 0], dtype=np.uint8)
         
         # Place disc mask in output
-        output[loc[0] - h//2 : loc[0] + h//2, 
-               loc[1] - w//2 : loc[1] + w//2] = disc_mask
+        output[int(loc[0]) - h//2 : int(loc[0]) + h//2, 
+               int(loc[1]) - w//2 : int(loc[1]) + w//2] = disc_mask
         
         return output
 

@@ -148,8 +148,8 @@ def localise_centre_mass(map) -> tuple:
         return None
     
     # Calculate centre of mass
-    cX = int(M['m10'] / M['m00'])
-    cY = int(M['m01'] / M['m00'])
+    cX = M['m10'] / M['m00']
+    cY = M['m01'] / M['m00']
     
     return (cY, cX)
 

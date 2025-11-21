@@ -69,45 +69,45 @@ class BaseWidget(QWidget):
         return {
             "pass": {
                 "normal": self._create_button_stylesheet(
-                    "#51cf66", "white", "#40c057", "#37b24d"
+                    "#10b981", "white", "#059669", "#047857"
                 ),
                 "highlighted": self._create_button_stylesheet(
-                    "#2f9e44", "white", "#40c057", "#37b24d", "#1b7e28"
+                    "#059669", "white", "#047857", "#047857", "#047857"
                 )
             },
             "borderline": {
                 "normal": self._create_button_stylesheet(
-                    "#ffd93d", "black", "#ffcc00", "#e6b800"
+                    "#f59e0b", "black", "#d97706", "#b45309"
                 ),
                 "highlighted": self._create_button_stylesheet(
-                    "#e6a500", "black", "#ffcc00", "#e6b800", "#b38600"
+                    "#d97706", "black", "#b45309", "#b45309", "#b45309"
                 )
             },
             "reject": {
                 "normal": self._create_button_stylesheet(
-                    "#ff6b6b", "white", "#ff5252", "#cc5555"
+                    "#f43f5e", "white", "#e11d48", "#be123c"
                 ),
                 "highlighted": self._create_button_stylesheet(
-                    "#dc2626", "white", "#ff5252", "#cc5555", "#991b1b"
+                    "#e11d48", "white", "#be123c", "#be123c", "#be123c"
                 )
             },
             "segment": {
                 "normal": self._create_button_stylesheet(
-                    "#ffd93d", "black", "#ffcc00", "#e6b800"
+                    "#f59e0b", "black", "#d97706", "#b45309"
                 ),
                 "highlighted": self._create_button_stylesheet(
-                    "#e6a500", "black", "#ffcc00", "#e6b800", "#b38600"
+                    "#d97706", "black", "#b45309", "#b45309", "#b45309"
                 ),
                 "finished": self._create_button_stylesheet(
-                    "#51cf66", "white", "#40c057", "#37b24d", "#1b7e28"
+                    "#10b981", "white", "#059669", "#047857", "#047857"
                 )
             },
             "nav": {
                 "normal": self._create_button_stylesheet(
-                    "#868e96", "white", "#748087", "#5a6268", font_size="10px"
+                    "#64748b", "white", "#475569", "#334155", font_size="10px"
                 ),
                 "disabled": self._create_button_stylesheet(
-                    "#adb5bd", "white", "#adb5bd", "#adb5bd", font_size="10px"
+                    "#cbd5e1", "white", "#cbd5e1", "#cbd5e1", font_size="10px"
                 )
             }
         }
@@ -246,32 +246,7 @@ class BaseWidget(QWidget):
         panel.setLayout(window_layout)
 
         return panel, self.canvas
-
-    def _update_image_list_item_style(self, name: str, status: str = None):
-        """
-        Style an image list item based on status.
         
-        Args:
-            name: Name of the image
-            status: Status type ('pass', 'borderline', 'reject', or None)
-            
-        Returns:
-            Tuple of (display_text, color_code)
-        """
-        # Status color mapping
-        status_colors = {
-            "pass": ("#2f9e44", "✓"),           # Green
-            "borderline": ("#e6a500", "⚠"),     # Orange
-            "reject": ("#dc2626", "✗"),         # Red
-        }
-        
-        if status and status in status_colors:
-            color, symbol = status_colors[status]
-            display_text = f"{name} [{status.upper()}]"
-            return display_text, color
-        
-        return name, None
-    
     def _create_button_stylesheet(
         self,
         bg_color: str,
