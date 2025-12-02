@@ -209,7 +209,10 @@ class OverlayLayer:
         # Cache empty buffer
         self._empty_buffer = None
         
+        self._composed_qimage: Optional[QImage] = None
+        
         self._channel = "all"
+
         self._opacity = 0.75
         self._pixmap = None
         self._pixmap_dirty = True  # Flag to track if pixmap needs recomposition
@@ -248,7 +251,6 @@ class OverlayLayer:
     def opacity(self, value: float):
         """Set overlay opacity (0.0 to 1.0)"""
         self._opacity = max(0.0, min(1.0, value))
-        self._pixmap_dirty = True
     
     ############ GETTER/SETTER ############
     
@@ -410,16 +412,14 @@ class OverlayLayer:
             transparent.fill(Qt.GlobalColor.transparent)
             self._pixmap = transparent
             self._pixmap_dirty = False
+            self._composed_qimage = None
             return
         
         # Compose channels based on selection
-        composed_qimage = self._compose_channels()
-        
-        # Apply opacity to alpha channel
-        self._apply_opacity_to_buffer(composed_qimage)
+        self._composed_qimage = self._compose_channels()
         
         # Convert to pixmap
-        self._pixmap = QPixmap.fromImage(composed_qimage)
+        self._pixmap = QPixmap.fromImage(self._composed_qimage)
         self._pixmap_dirty = False
     
     def _compose_vessels_mode(self) -> QImage:
@@ -494,22 +494,10 @@ class OverlayLayer:
         
         return composed
     
-    def _apply_opacity_to_buffer(self, qimage: QImage):
-        """Modify QImage alpha channel based on opacity setting"""
-        ptr = qimage.bits()
-        h, w = qimage.height(), qimage.width()
-        byte_count = qimage.bytesPerLine() * h
-        
-        # Create numpy view of pixel data (ARGB32)
-        pixels = np.ndarray((byte_count,), dtype=np.uint8, buffer=ptr)
-        pixels = pixels.reshape((h, w, 4))
-        
-        # Scale alpha channel by opacity
-        pixels[:, :, 3] = (pixels[:, :, 3] * self.opacity).astype(np.uint8)
-
     def _draw_pen_stroke(self, pen: QPen, 
                          points: list,
-                         mode: QPainter.CompositionMode = QPainter.CompositionMode.CompositionMode_SourceOver):
+                         mode: QPainter.CompositionMode = QPainter.CompositionMode.CompositionMode_SourceOver,
+                         update_alpha: bool = True):
         """Draw a pen stroke"""
         # Determine which channels to paint based on current overlay channel
         paint_r = self.channel in ['red', 'vessels', 'all']
@@ -530,15 +518,16 @@ class OverlayLayer:
                 painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
             painter.end()
             
-        # OPTIMIZATION: Paint directly on alpha channel for instant feedback
-        # This avoids the expensive _update_alpha_channel() call during the stroke
-        painter = QPainter(self._channels['a']._qimage)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.setPen(pen)
-        for i in range(len(points) - 1):
-            painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
-        painter.end()
+        if update_alpha:
+            # OPTIMIZATION: Paint directly on alpha channel for instant feedback
+            # This avoids the expensive _update_alpha_channel() call during the stroke
+            painter = QPainter(self._channels['a']._qimage)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.setPen(pen)
+            for i in range(len(points) - 1):
+                painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
+            painter.end()
     
     def _draw_brush_segment(self, points, radius: float):
         """Draw a single line segment on the R and B channels"""
@@ -552,8 +541,46 @@ class OverlayLayer:
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         pen.setColor(Qt.GlobalColor.white)
 
-        # Paint on selected channels
-        self._draw_pen_stroke(pen, points)
+        # Paint on selected channels (skip alpha update as we use incremental paint for display)
+        self._draw_pen_stroke(pen, points, update_alpha=False)
+        
+        # Incremental update for performance
+        self._incremental_paint(points, radius)
+
+    def _incremental_paint(self, points, radius: float):
+        """Update the composed image and pixmap directly without full recomposition"""
+        if self._composed_qimage is None:
+            return
+
+        painter = QPainter(self._composed_qimage)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        
+        # Determine color based on active channels
+        r = 255 if self.channel in ['red', 'vessels', 'all'] else 0
+        g = 255 if self.channel in ['green', 'all'] else 0
+        b = 255 if self.channel in ['blue', 'vessels', 'all'] else 0
+        
+        # If no color is active, nothing to draw
+        if r == 0 and g == 0 and b == 0:
+            painter.end()
+            return
+
+        color = QColor(r, g, b)
+        pen = QPen(color)
+        pen.setWidth(int(2 * radius))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        
+        for i in range(len(points) - 1):
+            painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
+        painter.end()
+        
+        # Update pixmap from the modified composed image
+        self._pixmap = QPixmap.fromImage(self._composed_qimage)
+        self._pixmap_dirty = False
 
     def _draw_erase_segment(self, points, radius: float):
         """Erase a single line segment, respecting the current channel"""
@@ -798,7 +825,7 @@ class Canvas(QGraphicsView):
     def set_overlay_opacity(self, opacity: float):
         """Set overlay opacity (0.0 to 1.0) and update display"""
         self.overlay_layer.opacity = opacity
-        self.update_overlay_display()
+        self.overlay_item.setOpacity(opacity)
 
     ################ PUBLIC METHODS ################
     
