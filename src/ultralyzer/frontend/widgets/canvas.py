@@ -511,7 +511,6 @@ class OverlayLayer:
         
         for ch_name in channels_to_paint:
             painter = QPainter(self._channels[ch_name]._qimage)
-            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(mode)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -520,9 +519,7 @@ class OverlayLayer:
             
         if update_alpha:
             # OPTIMIZATION: Paint directly on alpha channel for instant feedback
-            # This avoids the expensive _update_alpha_channel() call during the stroke
             painter = QPainter(self._channels['a']._qimage)
-            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -553,12 +550,45 @@ class OverlayLayer:
             return
 
         painter = QPainter(self._composed_qimage)
-        # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         
         # Determine color based on active channels
         r = 255 if self.channel in ['red', 'vessels', 'all'] else 0
+        g = 255 if self.channel in ['green', 'all'] else 0
+        b = 255 if self.channel in ['blue', 'vessels', 'all'] else 0
+        
+        # If no color is active, nothing to draw
+        if r == 0 and g == 0 and b == 0:
+            painter.end()
+            return
+
+        color = QColor(r, g, b)
+        pen = QPen(color)
+        pen.setWidth(int(2 * radius))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        
+        for i in range(len(points) - 1):
+            painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
+        painter.end()
+        
+        # Update pixmap from the modified composed image
+        self._pixmap = QPixmap.fromImage(self._composed_qimage)
+        self._pixmap_dirty = False
+        
+    def _incremental_erase(self, points, radius: float):
+        """Update the composed image and pixmap directly without full recomposition"""
+        if self._composed_qimage is None:
+            return
+
+        painter = QPainter(self._composed_qimage)
+        
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        
+        # Determine color based on active channels
+        r = 0 if self.channel in ['red', 'vessels', 'all'] else 0
         g = 255 if self.channel in ['green', 'all'] else 0
         b = 255 if self.channel in ['blue', 'vessels', 'all'] else 0
         
@@ -596,6 +626,9 @@ class OverlayLayer:
 
         # Paint on selected channels
         self._draw_pen_stroke(pen, points)
+        
+        # Incremental update for performance
+        self._incremental_erase(points, radius)
     
     def _draw_smart_paint_segment(self, points, radius: float):
         """
