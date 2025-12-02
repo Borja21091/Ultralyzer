@@ -7,6 +7,8 @@ import cv2
 from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP
 from typing import Optional, Dict
 
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
+
 
 class ChannelBuffer:
     """
@@ -697,6 +699,10 @@ class Canvas(QGraphicsView):
     
     def __init__(self, image_layer: ImageLayer, overlay_layer: OverlayLayer):
         super().__init__()
+        
+        # Enable hardware acceleration
+        self.setViewport(QOpenGLWidget())
+        
         self.image_layer = image_layer
         self.overlay_layer = overlay_layer
         
