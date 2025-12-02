@@ -511,7 +511,7 @@ class OverlayLayer:
         
         for ch_name in channels_to_paint:
             painter = QPainter(self._channels[ch_name]._qimage)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(mode)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -522,7 +522,7 @@ class OverlayLayer:
             # OPTIMIZATION: Paint directly on alpha channel for instant feedback
             # This avoids the expensive _update_alpha_channel() call during the stroke
             painter = QPainter(self._channels['a']._qimage)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -553,7 +553,7 @@ class OverlayLayer:
             return
 
         painter = QPainter(self._composed_qimage)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         
@@ -724,7 +724,7 @@ class Canvas(QGraphicsView):
     signal_zoom_changed = Signal()
     signal_fovea_selected = Signal(float, float)  # x, y coordinates of fovea selection
     
-    def __init__(self, image_layer: ImageLayer, overlay_layer: OverlayLayer):
+    def __init__(self, image_layer: Optional[ImageLayer]=None, overlay_layer: Optional[OverlayLayer]=None):
         super().__init__()
         
         # Enable hardware acceleration
@@ -738,8 +738,8 @@ class Canvas(QGraphicsView):
         self.setScene(self._scene)
         
         # Create pixmap items for each layer
-        self.image_item = QGraphicsPixmapItem(image_layer.pixmap)
-        self.overlay_item = QGraphicsPixmapItem(overlay_layer.pixmap)
+        self.image_item = QGraphicsPixmapItem(image_layer.pixmap) if image_layer else QGraphicsPixmapItem()
+        self.overlay_item = QGraphicsPixmapItem(overlay_layer.pixmap) if overlay_layer else QGraphicsPixmapItem()
         
         # Add items to scene (image first, overlay on top)
         self._scene.addItem(self.image_item)

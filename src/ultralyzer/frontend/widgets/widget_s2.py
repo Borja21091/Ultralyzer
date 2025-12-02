@@ -7,14 +7,15 @@ from PySide6.QtWidgets import (
     QProgressBar, QComboBox, QSlider, QSplitter, 
     QLabel, QMessageBox, QWidget, QTextEdit, QCheckBox
 )
+from frontend.widgets.canvas import Canvas
 from backend.steps.metrics import MetricsStep
 from PySide6.QtCore import Qt, Signal, QThread
 from backend.models.segmentor import Segmentor
 from frontend.widgets.widget_base import BaseWidget
 from backend.models.database import DatabaseManager
 from backend.steps.segmentation import SegmentationStep
+from frontend.widgets.canvas import ImageLayer, OverlayLayer
 from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
-from frontend.widgets.canvas import Canvas, ImageLayer, OverlayLayer
 from backend.models.segmentor import UWFFoveaSegmentor, UWFDiscSegmentor
 from PySide6.QtGui import QShortcut, QKeySequence, QCursor, QPixmap, QPainter
 
@@ -304,7 +305,13 @@ class SegmentationWidget(BaseWidget):
         self.canvas_container = QWidget()
         canvas_layout = QVBoxLayout(self.canvas_container)
         canvas_layout.setContentsMargins(0, 0, 0, 0)
-        canvas_layout.addWidget(QLabel("Load an image to begin"))
+        
+        # Initialize Canvas immediately
+        self.canvas = Canvas()
+        self.canvas.signal_zoom_changed.connect(self._update_brush_cursor)
+        self.canvas.signal_fovea_selected.connect(self._on_fovea_location_selected)
+        
+        canvas_layout.addWidget(self.canvas)
         self.main_splitter.addWidget(self.canvas_container)
         
         # Right side: Edit toolbar (hidden by default)
