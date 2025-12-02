@@ -361,23 +361,23 @@ class OverlayLayer:
         
         clicked_color = np.array([b_val, g_val, r_val], dtype=np.uint8)
         
-        # If clicked on transparent (all black), no action
-        if np.all(clicked_color == 0):
+        # If the clicked pixel doesn't contain red or blue, no action
+        if r_val != 255 and b_val != 255:
             return False
         
         # Determine target color based on clicked color (BGR format)
         target_color = self.get_switch_target_color(clicked_color)
-        target_b, target_g, target_r = target_color[0], target_color[1], target_color[2]
+        target_b, _, target_r = target_color[0], target_color[1], target_color[2]
         
         # Create masks for flood fill (using R and B channels to identify vessel pixels)
         r_data = r_pixels[:, :, 0]
         b_data = b_pixels[:, :, 0]
         
         mask = np.zeros((h, w), dtype=np.uint8)
-        self._flood_fill_mask(r_data, b_data, mask, int(x), int(y), r_val, b_val, tolerance=5)
+        self._flood_fill_mask(r_data, b_data, mask, int(x), int(y), r_val, b_val, tolerance=0)
         
-        # Apply color switch to all masked pixels in R, G, B channels
-        for ch_name, target_val in [('r', target_r), ('g', target_g), ('b', target_b)]:
+        # Apply color switch to all masked pixels in R, B channels
+        for ch_name, target_val in [('r', target_r), ('b', target_b)]:
             ch_ptr = self._channels[ch_name]._qimage.bits()
             ch_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=ch_ptr)
             ch_pixels[mask > 0, :] = target_val
@@ -844,7 +844,6 @@ class Canvas(QGraphicsView):
             # Center the 20x20 circle on the coordinates
             self.fovea_item.setRect(x - 10, y - 10, 20, 20)
             self.set_fovea_visibility(True)
-            self.signal_fovea_selected.emit(x, y)
     
     def set_fovea_visibility(self, visible: bool):
         """Set fovea marker visibility"""
@@ -914,6 +913,7 @@ class Canvas(QGraphicsView):
         # Handle fovea location tool (single click, no stroke)
         if self.current_tool == "fovea_location":
             self.update_fovea(pos.x(), pos.y())
+            self.signal_fovea_selected.emit(pos.x(), pos.y())
             return
         
         self.stroke_points = [(pos.x(), pos.y())]

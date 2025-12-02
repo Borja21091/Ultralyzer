@@ -77,7 +77,7 @@ class SegmentationStep(ProcessingStep):
                     self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
                     
             if disc_cx and loc is not None:
-                laterality = "left" if loc[1] < disc_cx else "right"
+                laterality = "rirght" if loc[1] < disc_cx else "left"
                 if metadata:
                     self.db_manager.save_metrics_laterality_by_id(id, laterality)
             

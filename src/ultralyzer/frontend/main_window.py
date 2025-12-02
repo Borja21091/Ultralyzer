@@ -94,22 +94,33 @@ class MainWindow(QMainWindow):
         # File menu
         file_menu = menubar.addMenu("File")
         
-        open_image_folder_action = QAction("Open Image Folder", self)
-        open_image_folder_action.triggered.connect(self._on_select_image_folder)
-        file_menu.addAction(open_image_folder_action)
+        action_open_image_folder = QAction("Open Image Folder", self)
+        action_open_image_folder.triggered.connect(self._on_select_image_folder)
+        file_menu.addAction(action_open_image_folder)
         
-        load_mask_folder_action = QAction("Load Mask Folder", self)
-        load_mask_folder_action.triggered.connect(self._on_select_mask_folder)
-        file_menu.addAction(load_mask_folder_action)
+        action_load_mask_folder = QAction("Load Mask Folder", self)
+        action_load_mask_folder.triggered.connect(self._on_select_mask_folder)
+        file_menu.addAction(action_load_mask_folder)
         
         # file_menu.addSeparator()
+        
+        # Segmentation menu
+        segmentation_menu = menubar.addMenu("Segmentation")
+        
+        action_av_segment = QAction("A/V Segment", self)
+        action_av_segment.triggered.connect(self._on_av_segment)
+        segmentation_menu.addAction(action_av_segment)
+        
+        action_disc_segment = QAction("Disc Segment", self)
+        action_disc_segment.triggered.connect(self._on_disc_segment)
+        segmentation_menu.addAction(action_disc_segment)
         
         # Help menu
         help_menu = menubar.addMenu("Help")
         
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self._on_about)
-        help_menu.addAction(about_action)
+        action_about = QAction("About", self)
+        action_about.triggered.connect(self._on_about)
+        help_menu.addAction(action_about)
     
     ############ PUBLIC METHODS ############
     
@@ -217,5 +228,13 @@ class MainWindow(QMainWindow):
         self._mask_folder = Path(folder)
         self._load_mask_info_to_db(self._mask_folder)
         self.statusBar().showMessage(f"Loaded masks from: {self._mask_folder}")
+    
+    def _on_av_segment(self):
+        """Handle A/V segmentation action"""
+        pass  # TODO: Implement A/V segmentation action
+    
+    def _on_disc_segment(self):
+        """Handle Disc segmentation action"""
+        pass  # TODO: Implement Disc segmentation action
     
     

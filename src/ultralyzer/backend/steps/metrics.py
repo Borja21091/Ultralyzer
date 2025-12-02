@@ -9,8 +9,10 @@ import numpy as np
 import logging
 import ctypes
 
+from backend.utils.preprocessing import localise_centre_mass
 from backend.models.database import DatabaseManager
 from backend.steps.base_step import ProcessingStep
+from backend.utils.arcades import ArcadeRANSAC
 
 
 class MetricsStep(ProcessingStep):
@@ -65,7 +67,7 @@ class MetricsStep(ProcessingStep):
                 return {"success": False, "error": "Segmentation mask file not found"}
             
             # Prepare output dictionary
-            metrics = {key: float('nan') for key in METRIC_DICTIONARY.keys()}
+            metrics = {}
             
             # Load segmentation masks
             mask = np.array(Image.open(seg_mask_path))
@@ -78,16 +80,20 @@ class MetricsStep(ProcessingStep):
             if not self.od_mask.any():
                 self.logger.warning(f"No optic disc detected in {name}. Skipping OD metrics.")
             else:
-                od_indices = np.argwhere(self.od_mask)
-                od_center_y, od_center_x = np.mean(od_indices, axis=0)
+                od_center_y, od_center_x = localise_centre_mass((self.od_mask * 255).astype(np.uint8))
                 metrics["disc_center_x"] = float(od_center_x)
                 metrics["disc_center_y"] = float(od_center_y)
                 metrics["disc_area_px"] = float(np.sum(self.od_mask))
                 metrics["disc_diameter_px"] = float(2 * np.sqrt(metrics["disc_area_px"] / np.pi))
                 
-                # Circularity and Eccentricity
+                # Fitted ellipse properties
                 labeled_od = label(self.od_mask)
                 props = regionprops(labeled_od)[0]
+                metrics["disc_major_axis_px"] = float(props.major_axis_length)
+                metrics["disc_minor_axis_px"] = float(props.minor_axis_length)
+                metrics["disc_orientation_deg"] = float(props.orientation * (180.0 / np.pi))
+                
+                # Circularity and Eccentricity
                 metrics["disc_eccentricity"] = float(props.eccentricity)
                 metrics["disc_circularity"] = float((4 * np.pi * props.area) / (props.perimeter ** 2)) * float((1 - 0.5 / ((props.perimeter / (2*np.pi)) + 0.5))**2) if props.perimeter > 0 else 0.0
 
@@ -97,9 +103,18 @@ class MetricsStep(ProcessingStep):
                     pass
                 else:
                     self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping optic disc micron metrics for {name}.")
+                    
+                # Save to DB
+                self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
             
             # Get fovea center from database
-            fovea_center_x, fovea_center_y = self.db_manager.get_fovea_by_filename(name)
+            fovea_center_x, fovea_center_y = self.db_manager.get_fovea_by_filename(name) # (col, row) = (x, y)
+            
+            # Transform (col, row) to Cartesian (x, y)
+            fovX = fovea_center_x
+            fovY = mask.shape[0] - fovea_center_y
+            discX = od_center_x
+            discY = mask.shape[0] - od_center_y
             
             # Optic Disc - Fovea metrics
             if fovea_center_x and fovea_center_y:
@@ -112,21 +127,24 @@ class MetricsStep(ProcessingStep):
                     )
                     metrics["disc_fovea_distance_px"] = float(od_fovea_distance)
                     metrics["disc_fovea_angle_deg"] = float(np.degrees(np.arctan(
-                        (fovea_center_y - metrics["disc_center_y"]) /
-                        (fovea_center_x - metrics["disc_center_x"] + 1e-6)
-                    )))
+                        (fovY - discY) / np.abs(fovX - discX + 1e-6))))
+                    
                     # Conversion to microns
                     if self.mex_flag:
                         pass
                     else:
                         self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping OD-Fovea micron metrics for {name}.")
+                        
+                    # Save to DB
+                    self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
             else:
                 self.logger.warning(f"Fovea location not found in database for {name}. Please identify the Fovea using the 'Edit mask' tool and re-run metric calculation. Skipping OD-Fovea metrics for now.")
             
             # Laterality
             if fovea_center_x and (not np.isnan(metrics["disc_center_x"]) or metrics["disc_center_x"] is not None):
-                laterality = "left" if fovea_center_x < metrics["disc_center_x"] else "right"
+                laterality = "right" if fovea_center_x < metrics["disc_center_x"] else "left"
                 metrics["laterality"] = laterality
+                self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
             
             # Vessel / Artery / Vein metrics
             masks = [self.vessel_mask, self.a_mask, self.v_mask]
@@ -177,6 +195,11 @@ class MetricsStep(ProcessingStep):
                 metrics["av_crossings"] = float(np.sum(artery_skeleton & vein_skeleton))
                 
                 # AV Arcade Concavity
+                arcader = ArcadeRANSAC(name=name, 
+                                       mask=self.vessel_mask, 
+                                       db_manager=self.db_manager)
+                arcader()
+                metrics["av_arcade_concavity"] = np.abs(arcader.concavity) if arcader.concavity is not None else float('nan')
             
             return {"success": True, "metrics": metrics}
         

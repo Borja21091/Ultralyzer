@@ -69,6 +69,11 @@ METRIC_DICTIONARY = {
     "disc_diameter_um" : "Diameter of equivalent optic disc circle (circle with same area as optic disc) in micrometers",
     "disc_area_px" : "Area of optic disc in pixels",
     "disc_area_um" : "Area of optic disc in micrometers",
+    "disc_major_axis_px" : "Length of the major axis of the fitted ellipse in pixels",
+    "disc_major_axis_um" : "Length of the major axis of the fitted ellipse in micrometers",
+    "disc_minor_axis_px" : "Length of the minor axis of the fitted ellipse in pixels",
+    "disc_minor_axis_um" : "Length of the minor axis of the fitted ellipse in micrometers",
+    "disc_orientation_deg" : "Angle between the disc-centroid -- fovea line and the major axis of the fitted ellipse in degrees",
     "disc_circularity" : "Roundness of optic disc [0, 1]",
     "disc_eccentricity" : "Eccentricity of the ellipse that has the same second-moments as the region. The eccentricity is the ratio of the focal distance (distance between focal points) over the major axis length [0, 1)",
     # FOVEA

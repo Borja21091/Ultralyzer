@@ -89,6 +89,11 @@ class MetricsResult(Base):
     disc_diameter_um = Column(Float, nullable=True)
     disc_area_px = Column(Float, nullable=True)
     disc_area_um = Column(Float, nullable=True)
+    disc_major_axis_px = Column(Float, nullable=True)
+    disc_major_axis_um = Column(Float, nullable=True)
+    disc_minor_axis_px = Column(Float, nullable=True)
+    disc_minor_axis_um = Column(Float, nullable=True)
+    disc_orientation_deg = Column(Float, nullable=True)
     disc_circularity = Column(Float, nullable=True)
     disc_eccentricity = Column(Float, nullable=True)
     # FOVEA

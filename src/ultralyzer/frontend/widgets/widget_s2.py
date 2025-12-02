@@ -272,7 +272,7 @@ class SegmentationWidget(BaseWidget):
     @property
     def has_unsaved_changes(self) -> bool:
         """Get unsaved changes state"""
-        return self._overlay_layer.has_changes()
+        return self._overlay_layer._is_dirty
 
     ############ UI ############
     
