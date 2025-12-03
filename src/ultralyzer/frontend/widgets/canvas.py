@@ -658,13 +658,6 @@ class OverlayLayer:
         
         # Update alpha channel
         self._channels['a'] = ChannelBuffer(alpha)
-    
-    def _flood_fill_mask(self, r_data: np.ndarray, b_data: np.ndarray, mask: np.ndarray, 
-                         x: int, y: int, target_r: int, target_b: int, tolerance: int = 5):
-        """
-        Deprecated: Use cv2.floodFill instead.
-        """
-        pass
 
 
 class Canvas(QGraphicsView):
@@ -860,7 +853,11 @@ class Canvas(QGraphicsView):
             elif c == 'vessels': 
                 color = QColor(255, 0, 255) 
             else: 
-                color = QColor(255, 255, 255) 
+                color = QColor(255, 255, 255)
+            # Dial down alpha if smart-paint
+            if self.current_tool == "smart_paint":
+                color.setAlpha(128)
+                
         
         pen = QPen(color)
         pen.setWidth(int(2 * self.brush_radius))
