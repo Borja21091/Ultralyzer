@@ -77,7 +77,8 @@ class MetricsStep(ProcessingStep):
             self.vessel_mask = self.a_mask | self.v_mask # Vessel mask
             
             # Calculate Optic Disc metrics
-            if not self.od_mask.any():
+            disc_flag = self.od_mask.any()
+            if not disc_flag:
                 self.logger.warning(f"No optic disc detected in {name}. Skipping OD metrics.")
             else:
                 od_center_y, od_center_x = localise_centre_mass((self.od_mask * 255).astype(np.uint8))
@@ -109,6 +110,7 @@ class MetricsStep(ProcessingStep):
             
             # Get fovea center from database
             fovea_center_x, fovea_center_y = self.db_manager.get_fovea_by_filename(name) # (col, row) = (x, y)
+            fovea_flag = fovea_center_x is not None and fovea_center_y is not None
             
             # Transform (col, row) to Cartesian (x, y)
             fovX = fovea_center_x
@@ -117,10 +119,10 @@ class MetricsStep(ProcessingStep):
             discY = mask.shape[0] - od_center_y
             
             # Optic Disc - Fovea metrics
-            if fovea_center_x and fovea_center_y:
+            if fovea_flag:
                 metrics["fovea_center_x"] = float(fovea_center_x)
                 metrics["fovea_center_y"] = float(fovea_center_y)
-                if (not np.isnan(metrics["disc_center_x"]) or metrics["disc_center_x"] is not None) and (not np.isnan(metrics["disc_center_y"]) or metrics["disc_center_y"] is not None):
+                if disc_flag:
                     od_fovea_distance = np.sqrt(
                         (metrics["disc_center_x"] - fovea_center_x) ** 2 +
                         (metrics["disc_center_y"] - fovea_center_y) ** 2
@@ -141,7 +143,7 @@ class MetricsStep(ProcessingStep):
                 self.logger.warning(f"Fovea location not found in database for {name}. Please identify the Fovea using the 'Edit mask' tool and re-run metric calculation. Skipping OD-Fovea metrics for now.")
             
             # Laterality
-            if fovea_center_x and (not np.isnan(metrics["disc_center_x"]) or metrics["disc_center_x"] is not None):
+            if fovea_flag and disc_flag:
                 laterality = "right" if fovea_center_x < metrics["disc_center_x"] else "left"
                 metrics["laterality"] = laterality
                 self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
