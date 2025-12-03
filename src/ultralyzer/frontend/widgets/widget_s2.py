@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from frontend.widgets.canvas import Canvas
 from backend.steps.metrics import MetricsStep
-from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtCore import Qt, Signal
 from backend.models.segmentor import Segmentor
 from frontend.widgets.widget_base import BaseWidget
 from backend.models.database import DatabaseManager
@@ -19,121 +19,9 @@ from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
 from backend.models.segmentor import UWFFoveaSegmentor, UWFDiscSegmentor
 from PySide6.QtGui import QShortcut, QKeySequence, QCursor, QPixmap, QPainter
 
+from backend.utils.threads import SingleMetricsWorker, BatchMetricsWorker
+from backend.utils.threads import SingleSegmentationWorker, BatchSegmentationWorker
 
-class BatchSegmentationWorker(QThread):
-    """Worker thread for batch segmentation"""
-    
-    progress = Signal(int, str)
-    finished = Signal(bool)
-    
-    def __init__(self, step_seg: SegmentationStep, metadata: list):
-        super().__init__()
-        self.step_seg = step_seg
-        self.metadata = metadata
-    
-    def run(self):
-        """Run segmentation batch"""
-        total = len(self.metadata)
-        
-        for idx, meta in enumerate(self.metadata):
-            try:
-                image_path = Path(meta.folder) / Path(meta.name + meta.extension)
-                success = self.step_seg.process_and_save_to_db(
-                    str(image_path),
-                    meta.id,
-                    ".png"
-                )
-                
-                progress_pct = int((idx + 1) / total * 100)
-                msg = f"{meta.name}: {'✓' if success else '✗'}"
-                self.progress.emit(progress_pct, msg)
-            
-            except Exception as e:
-                progress_pct = int((idx + 1) / total * 100)
-                self.progress.emit(progress_pct, f"Error: {str(e)}")
-        
-        self.finished.emit(True)
-
-
-class SingleSegmentationWorker(QThread):
-    """Worker thread for single image segmentation"""
-    
-    finished = Signal(bool)
-    
-    def __init__(self, step_seg: SegmentationStep, image_path: Path, id: int):
-        super().__init__()
-        self.step_seg = step_seg
-        self.image_path = image_path
-        self.id = id
-        
-    def run(self):
-        """Run segmentation for a single image"""
-        try:
-            success = self.step_seg.process_and_save_to_db(
-                str(self.image_path),
-                self.id, 
-                ".png"
-            )
-            self.finished.emit(success)
-        except Exception as e:
-            self.finished.emit(False)
-
-
-class BatchMetricsWorker(QThread):
-    """Worker thread for batch metrics calculation"""
-    
-    progress = Signal(int, str)
-    finished = Signal(bool)
-    
-    def __init__(self, step_metrics: MetricsStep, metadata: list):
-        super().__init__()
-        self.step_metrics = step_metrics
-        self.metadata = metadata
-    
-    def run(self):
-        """Run metrics calculation batch"""
-        total = len(self.metadata)
-        
-        for idx, meta in enumerate(self.metadata):
-            try:
-                image_path = Path(meta.folder) / Path(meta.name + meta.extension)
-                success = self.step_metrics.process_and_save_to_db(
-                    str(image_path),
-                    meta.id
-                )
-                
-                progress_pct = int((idx + 1) / total * 100)
-                msg = f"{meta.name}: {'✓' if success else '✗'}"
-                self.progress.emit(progress_pct, msg)
-            
-            except Exception as e:
-                progress_pct = int((idx + 1) / total * 100)
-                self.progress.emit(progress_pct, f"Error: {str(e)}")
-        
-        self.finished.emit(True)
-
-
-class SingleMetricsWorker(QThread):
-    """Worker thread for single image metrics calculation"""
-    
-    finished = Signal(bool)
-    
-    def __init__(self, step_metrics, image_path: Path, id: int):
-        super().__init__()
-        self.step_metrics = step_metrics
-        self.image_path = image_path
-        self.id = id
-        
-    def run(self):
-        """Run metrics calculation for a single image"""
-        try:
-            success = self.step_metrics.process_and_save_to_db(
-                str(self.image_path),
-                self.id
-            )
-            self.finished.emit(success)
-        except Exception as e:
-            self.finished.emit(False)
 
 
 class SegmentationWidget(BaseWidget):

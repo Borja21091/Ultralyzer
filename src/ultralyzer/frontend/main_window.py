@@ -1,3 +1,4 @@
+import cv2
 from pathlib import Path
 from definitions import IMAGE_FORMATS
 from PySide6.QtWidgets import (
@@ -9,6 +10,8 @@ from frontend.widgets.widget_base import BaseWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
 from backend.models.segmentor import UnetSegmentor
+
+from backend.utils.threads import AVSegmentationWorker, DiscSegmentationWorker
 
 class MainWindow(QMainWindow):
     """
@@ -22,6 +25,7 @@ class MainWindow(QMainWindow):
         self._mask_folder = None
         self._db_manager = DatabaseManager()
         self._image_list = []
+        self.worker = None
         
         self._init_ui()
     
@@ -231,10 +235,78 @@ class MainWindow(QMainWindow):
     
     def _on_av_segment(self):
         """Handle A/V segmentation action"""
-        pass  # TODO: Implement A/V segmentation action
+        
+        # Get current image
+        img_name = self.image_dropdown.currentText()
+        if not img_name:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image to segment.")
+            return
+        
+        # Find in database
+        meta = self._db_manager.get_metadata_by_filename(img_name)
+        if not meta:
+            QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {img_name}")
+            return
+        image_path = Path(meta.folder) / Path(meta.name + meta.extension)
+        
+        # Find segmentation mask details
+        seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+        if not seg_meta:
+            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
+            return
+        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+        
+        # Perform segmentation
+        try:
+            self.statusBar().showMessage(f"Segmenting A/V for image: {img_name}")
+            self.worker = AVSegmentationWorker(self.widget.step_seg, image_path, seg_path)
+            self.worker.finished.connect(lambda success: self.statusBar().showMessage(
+                f"A/V Segmentation {'succeeded' if success else 'failed'} for image: {img_name}"
+            ))
+            self.worker.finished.connect(self.widget.display_image)
+            self.worker.start()
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Error during A/V segmentation: {str(e)}")
+            
+        # Update display
+        self.widget.display_image()
     
     def _on_disc_segment(self):
         """Handle Disc segmentation action"""
-        pass  # TODO: Implement Disc segmentation action
+        
+        # Get current image
+        img_name = self.image_dropdown.currentText()
+        if not img_name:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image to segment.")
+            return
+        
+        # Find in database
+        meta = self._db_manager.get_metadata_by_filename(img_name)
+        if not meta:
+            QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {img_name}")
+            return
+        image_path = Path(meta.folder) / Path(meta.name + meta.extension)
+        
+        # Find segmentation mask details
+        seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+        if not seg_meta:
+            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
+            return
+        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+        
+        # Perform segmentation
+        try:
+            self.statusBar().showMessage(f"Segmenting Disc for image: {img_name}")
+            self.worker = DiscSegmentationWorker(self.widget.step_seg, image_path, seg_path)
+            self.worker.finished.connect(lambda success: self.statusBar().showMessage(
+                f"Disc Segmentation {'succeeded' if success else 'failed'} for image: {img_name}"
+            ))
+            self.worker.finished.connect(self.widget.display_image)
+            self.worker.start()
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Error during disc segmentation: {str(e)}")
+        
     
     
