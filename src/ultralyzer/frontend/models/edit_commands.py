@@ -16,7 +16,7 @@ class BrushStrokeCommand(QUndoCommand):
         self.channels_before = channels_before
         self.points = points
         self.radius = radius
-        self._already_applied = True
+        self._already_applied = False
     
     def redo(self):
         """Reapply the brush stroke"""
@@ -25,9 +25,7 @@ class BrushStrokeCommand(QUndoCommand):
             return
         
         # Redraw the stroke
-        for i in range(len(self.points) - 1):
-            segment = self.points[i:i+2]
-            self.overlay_layer._draw_brush_segment(segment, self.radius)
+        self.overlay_layer._draw_brush_segment(self.points, self.radius)
         
         # Mark display as dirty
         self.overlay_layer._pixmap_dirty = True
@@ -51,7 +49,7 @@ class EraseCommand(QUndoCommand):
         self.channels_before = channels_before
         self.points = points
         self.radius = radius
-        self._already_applied = True
+        self._already_applied = False
     
     def redo(self):
         """Reapply the erase operation"""
@@ -60,10 +58,7 @@ class EraseCommand(QUndoCommand):
             return
         
         # Redraw the erase
-        for i in range(len(self.points) - 1):
-            segment = self.points[i:i+2]
-            self.overlay_layer._draw_erase_segment(segment, self.radius)
-        
+        self.overlay_layer._draw_erase_segment(self.points, self.radius)
         self.overlay_layer._pixmap_dirty = True
     
     def undo(self):
@@ -110,7 +105,7 @@ class SmartPaintCommand(QUndoCommand):
         self.channels_before = channels_before
         self.points = points
         self.radius = radius
-        self._already_applied = True
+        self._already_applied = False
     
     def redo(self):
         """Reapply the smart paint stroke"""
@@ -118,11 +113,8 @@ class SmartPaintCommand(QUndoCommand):
             self._already_applied = False
             return
         
-        # Redraw all segments of the stroke
-        for i in range(len(self.points) - 1):
-            segment = self.points[i:i+2]
-            self.overlay_layer._draw_smart_paint_segment(segment, self.radius)
-        
+        # Redraw the stroke
+        self.overlay_layer._draw_smart_paint_segment(self.points, self.radius)
         self.overlay_layer._pixmap_dirty = True
     
     def undo(self):

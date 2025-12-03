@@ -1,7 +1,7 @@
-from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QPen, QColor, QBrush
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem
+from PySide6.QtGui import QImage, QPixmap, QPainter, QUndoStack, QPen, QColor, QBrush, QPainterPath
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsPathItem
 from frontend.models.edit_commands import BrushStrokeCommand, EraseCommand, ColorSwitchCommand, SmartPaintCommand
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPointF
 import numpy as np
 import cv2
 from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP
@@ -33,17 +33,28 @@ class ChannelBuffer:
         if channel_array is not None:
             # Create QImage from existing channel data
             h, w = channel_array.shape[:2]
-            # Convert grayscale to RGB (stacked copies) for QImage RGB888 format
-            rgb_array = np.stack([channel_array, channel_array, channel_array], axis=-1).astype(np.uint8)
-            bytes_per_line = 3 * w
-            q_img = QImage(rgb_array.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            self._qimage = q_img.copy()  # Detach from numpy buffer
+            
+            # Ensure contiguous and uint8
+            if not channel_array.flags['C_CONTIGUOUS']:
+                channel_array = np.ascontiguousarray(channel_array)
+            if channel_array.dtype != np.uint8:
+                channel_array = channel_array.astype(np.uint8)
+                
+            # QImage Format_Grayscale8: 1 byte per pixel
+            # Must align bytes_per_line to 4 bytes for QImage if we were creating it manually,
+            # but passing data directly lets QImage handle it or we specify stride.
+            # Ideally, let's use the array's stride if compatible, or copy.
+            bytes_per_line = w  # Assuming tightly packed for input
+            
+            # Note: QImage constructor with data does not copy. We must copy() to own the data.
+            q_img = QImage(channel_array.tobytes(), w, h, bytes_per_line, QImage.Format.Format_Grayscale8)
+            self._qimage = q_img.copy()
         else:
             # Create empty buffer
             if width is None or height is None:
                 raise ValueError("Must provide either channel_array or (width, height)")
-            self._qimage = QImage(width, height, QImage.Format.Format_RGB888)
-            self._qimage.fill(0)  # Black (transparent/empty)
+            self._qimage = QImage(width, height, QImage.Format.Format_Grayscale8)
+            self._qimage.fill(0)
     
     @property
     def qimage(self) -> QImage:
@@ -60,14 +71,13 @@ class ChannelBuffer:
         """
         ptr = self._qimage.bits()
         h, w = self._qimage.height(), self._qimage.width()
+        bytes_per_line = self._qimage.bytesPerLine()
         
-        # QImage Format_RGB888: 3 bytes per pixel (all identical for grayscale)
-        byte_count = self._qimage.bytesPerLine() * h
-        pixels = np.ndarray((byte_count,), dtype=np.uint8, buffer=ptr)
-        pixels = pixels.reshape((h, w, 3))
+        # Map the whole buffer including padding
+        pixels = np.ndarray((h, bytes_per_line), dtype=np.uint8, buffer=ptr)
         
-        # Extract first channel (all three are identical for grayscale)
-        return pixels[:, :, 0].copy()
+        # Return view of the valid width
+        return pixels[:, :w]
     
     def copy(self) -> 'ChannelBuffer':
         """Create a deep copy of this buffer."""
@@ -105,32 +115,21 @@ class ChannelBuffer:
         w = r_buffer._qimage.width()
         h = r_buffer._qimage.height()
         
-        # Extract numpy arrays from each channel (first byte of RGB888)
-        r_ptr = r_buffer._qimage.bits()
-        r_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=r_ptr)
-        r_data = r_pixels[:, :, 0]
+        # Get views (handling stride)
+        r_data = r_buffer.numpy_view
+        g_data = g_buffer.numpy_view
+        b_data = b_buffer.numpy_view
+        a_data = a_buffer.numpy_view
         
-        g_ptr = g_buffer._qimage.bits()
-        g_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=g_ptr)
-        g_data = g_pixels[:, :, 0]
+        # Stack into BGRA (Qt uses BGRA byte order for Format_ARGB32 on Little Endian)
+        # This avoids cv2.cvtColor(RGBA -> BGRA)
+        bgra = np.dstack((b_data, g_data, r_data, a_data))
         
-        b_ptr = b_buffer._qimage.bits()
-        b_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=b_ptr)
-        b_data = b_pixels[:, :, 0]
-        
-        a_ptr = a_buffer._qimage.bits()
-        a_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=a_ptr)
-        a_data = a_pixels[:, :, 0]
-        
-        # Stack into RGBA
-        rgba = np.stack([r_data, g_data, b_data, a_data], axis=-1).astype(np.uint8)
-        
-        # Convert RGB to BGR for Qt (Qt uses BGRA internally for ARGB32)
-        bgra = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA)
-        
-        bytes_per_line = 4 * w
-        q_img = QImage(bgra.tobytes(), w, h, bytes_per_line, QImage.Format.Format_ARGB32)
-        return q_img.copy()  # Detach from numpy buffer
+        # Create QImage
+        # We need to ensure the data persists or is copied. 
+        # QImage(bytes, ...) does not copy.
+        q_img = QImage(bgra.tobytes(), w, h, QImage.Format.Format_ARGB32)
+        return q_img.copy()
 
 
 class ImageLayer:
@@ -256,9 +255,9 @@ class OverlayLayer:
     
     def get_array(self) -> np.ndarray:
         """Return the RGB numpy array (composed from channel buffers)"""
-        r_data = self._channels['r'].to_numpy()
-        g_data = self._channels['g'].to_numpy()
-        b_data = self._channels['b'].to_numpy()
+        r_data = self._channels['r'].numpy_view
+        g_data = self._channels['g'].numpy_view
+        b_data = self._channels['b'].numpy_view
         
         rgb_array = np.stack([r_data, g_data, b_data], axis=-1).astype(np.uint8)
         return rgb_array
@@ -350,18 +349,14 @@ class OverlayLayer:
         if x < 0 or x >= w or y < 0 or y >= h:
             return False
         
-        # Get pixel colors at click position
-        r_ptr = self._channels['r']._qimage.bits()
-        r_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=r_ptr)
-        r_val = r_pixels[int(y), int(x), 0]
+        # Get pixel colors at click position using numpy views
+        r_view = self._channels['r'].numpy_view
+        g_view = self._channels['g'].numpy_view
+        b_view = self._channels['b'].numpy_view
         
-        g_ptr = self._channels['g']._qimage.bits()
-        g_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=g_ptr)
-        g_val = g_pixels[int(y), int(x), 0]
-        
-        b_ptr = self._channels['b']._qimage.bits()
-        b_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=b_ptr)
-        b_val = b_pixels[int(y), int(x), 0]
+        r_val = r_view[int(y), int(x)]
+        g_val = g_view[int(y), int(x)]
+        b_val = b_view[int(y), int(x)]
         
         clicked_color = np.array([b_val, g_val, r_val], dtype=np.uint8)
         
@@ -373,18 +368,44 @@ class OverlayLayer:
         target_color = self.get_switch_target_color(clicked_color)
         target_b, _, target_r = target_color[0], target_color[1], target_color[2]
         
-        # Create masks for flood fill (using R and B channels to identify vessel pixels)
-        r_data = r_pixels[:, :, 0]
-        b_data = b_pixels[:, :, 0]
+        # Determine which channel to flood fill (the source channel)
+        if r_val > b_val:
+            # Clicked Red (Artery), fill only Red component
+            source_view = r_view
+        elif b_val > r_val:
+            # Clicked Blue (Vein), fill only Blue component
+            source_view = b_view
+        else:
+            # Ambiguous (Purple). Default to Blue -> Red switch (fill Blue)
+            source_view = b_view
         
-        mask = np.zeros((h, w), dtype=np.uint8)
-        self._flood_fill_mask(r_data, b_data, mask, int(x), int(y), r_val, b_val, tolerance=0)
+        # Use OpenCV floodFill for performance
+        # Mask must be 2 pixels larger than image
+        mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+        
+        # Flood fill on the SPECIFIC channel view
+        # flags=8 means 8-connected. (255 << 8) fills the mask with 255.
+        # FLOODFILL_MASK_ONLY prevents modifying the source image.
+        flags = 8 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY
+        
+        # We use the source_view (R or B) as the reference image.
+        # It will only fill connected pixels of that specific color.
+        cv2.floodFill(source_view, mask, (int(x), int(y)), 255, loDiff=0, upDiff=0, flags=flags)
+        
+        # Extract the relevant part of the mask (remove padding)
+        fill_mask = mask[1:-1, 1:-1].astype(bool)
         
         # Apply color switch to all masked pixels in R, B channels
-        for ch_name, target_val in [('r', target_r), ('b', target_b)]:
-            ch_ptr = self._channels[ch_name]._qimage.bits()
-            ch_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=ch_ptr)
-            ch_pixels[mask > 0, :] = target_val
+        # We write directly to the numpy views which map to QImage memory
+        if target_r > 0:
+            r_view[fill_mask] = 255
+        else:
+            r_view[fill_mask] = 0
+            
+        if target_b > 0:
+            b_view[fill_mask] = 255
+        else:
+            b_view[fill_mask] = 0
         
         return True
     
@@ -430,26 +451,18 @@ class OverlayLayer:
         w, h = self._channels['r'].get_dimensions()
         
         # 1. Get direct views of R and B channels
-        r_ptr = self._channels['r']._qimage.bits()
-        r_arr = np.ndarray((h, w, 3), dtype=np.uint8, buffer=r_ptr)
-        r_data = r_arr[:, :, 0]
-        
-        b_ptr = self._channels['b']._qimage.bits()
-        b_arr = np.ndarray((h, w, 3), dtype=np.uint8, buffer=b_ptr)
-        b_data = b_arr[:, :, 0]
+        r_data = self._channels['r'].numpy_view
+        b_data = self._channels['b'].numpy_view
         
         # 2. Calculate Alpha and Green
         a_data = np.bitwise_or(r_data, b_data)
-        g_data = np.zeros((h, w), dtype=np.uint8)
+        g_data = np.zeros_like(r_data)
         
-        # 3. Stack into RGBA (Single Allocation)
-        rgba = np.stack([r_data, g_data, b_data, a_data], axis=-1).astype(np.uint8)
+        # 3. Stack into BGRA (Qt uses BGRA byte order for Format_ARGB32)
+        bgra = np.dstack((b_data, g_data, r_data, a_data))
         
-        # 4. Convert to BGR for Qt (Qt uses BGRA internally for ARGB32)
-        bgra = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA)
-        
-        bytes_per_line = 4 * w
-        q_img = QImage(bgra.tobytes(), w, h, bytes_per_line, QImage.Format.Format_ARGB32)
+        # 4. Create QImage
+        q_img = QImage(bgra.tobytes(), w, h, QImage.Format.Format_ARGB32)
         return q_img.copy()
     
     def _compose_channels(self) -> QImage:
@@ -511,7 +524,6 @@ class OverlayLayer:
         
         for ch_name in channels_to_paint:
             painter = QPainter(self._channels[ch_name]._qimage)
-            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(mode)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -520,9 +532,7 @@ class OverlayLayer:
             
         if update_alpha:
             # OPTIMIZATION: Paint directly on alpha channel for instant feedback
-            # This avoids the expensive _update_alpha_channel() call during the stroke
             painter = QPainter(self._channels['a']._qimage)
-            # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
             painter.setPen(pen)
             for i in range(len(points) - 1):
@@ -544,44 +554,6 @@ class OverlayLayer:
         # Paint on selected channels (skip alpha update as we use incremental paint for display)
         self._draw_pen_stroke(pen, points, update_alpha=False)
         
-        # Incremental update for performance
-        self._incremental_paint(points, radius)
-
-    def _incremental_paint(self, points, radius: float):
-        """Update the composed image and pixmap directly without full recomposition"""
-        if self._composed_qimage is None:
-            return
-
-        painter = QPainter(self._composed_qimage)
-        # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        
-        # Determine color based on active channels
-        r = 255 if self.channel in ['red', 'vessels', 'all'] else 0
-        g = 255 if self.channel in ['green', 'all'] else 0
-        b = 255 if self.channel in ['blue', 'vessels', 'all'] else 0
-        
-        # If no color is active, nothing to draw
-        if r == 0 and g == 0 and b == 0:
-            painter.end()
-            return
-
-        color = QColor(r, g, b)
-        pen = QPen(color)
-        pen.setWidth(int(2 * radius))
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        
-        for i in range(len(points) - 1):
-            painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
-        painter.end()
-        
-        # Update pixmap from the modified composed image
-        self._pixmap = QPixmap.fromImage(self._composed_qimage)
-        self._pixmap_dirty = False
-
     def _draw_erase_segment(self, points, radius: float):
         """Erase a single line segment, respecting the current channel"""
         self._is_dirty = True
@@ -606,6 +578,9 @@ class OverlayLayer:
         self._is_dirty = True
         self._pixmap_dirty = True
         
+        if len(points) < 2:
+            return
+
         # 1. Calculate Bounding Box (ROI)
         pad = int(radius) + 2
         x_coords = [p[0] for p in points]
@@ -617,63 +592,66 @@ class OverlayLayer:
         max_x = min(w, int(max(x_coords)) + pad)
         min_y = max(0, int(min(y_coords)) - pad)
         max_y = min(h, int(max(y_coords)) + pad)
-        bbox = (min_x, min_y, max_x, max_y)
         
         w_roi = max_x - min_x
         h_roi = max_y - min_y
         
         if w_roi <= 0 or h_roi <= 0:
             return
+            
+        bbox = (min_x, min_y, max_x, max_y)
 
-        # 2. Create Local Mask
-        mask_roi = np.zeros((h_roi, w_roi), dtype=np.uint8)
+        # 2. Create Local Mask using QPainter
+        mask_image = QImage(w_roi, h_roi, QImage.Format.Format_Grayscale8)
+        mask_image.fill(0)
         
-        # Adjust points to ROI coordinates
-        x0, y0 = int(points[0][0]) - min_x, int(points[0][1]) - min_y
-        x1, y1 = int(points[1][0]) - min_x, int(points[1][1]) - min_y
+        painter = QPainter(mask_image)
+        painter.setPen(QPen(Qt.GlobalColor.white, int(2 * radius), 
+                           Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         
-        cv2.line(mask_roi, (x0, y0), (x1, y1), (255,), int(2 * radius), cv2.LINE_AA)
+        # Convert points to local coordinates
+        local_points = [QPointF(p[0] - min_x, p[1] - min_y) for p in points]
+        painter.drawPolyline(local_points)
+        painter.end()
         
+        # Convert QImage to numpy array
+        ptr = mask_image.bits()
+        bytes_per_line = mask_image.bytesPerLine()
+        
+        if bytes_per_line != w_roi:
+             full_buffer = np.ndarray((h_roi, bytes_per_line), dtype=np.uint8, buffer=ptr)
+             mask_roi = full_buffer[:, :w_roi]
+        else:
+             mask_roi = np.ndarray((h_roi, w_roi), dtype=np.uint8, buffer=ptr)
+
         # 3. Get Local Views of Channels
         r_roi = self._get_roi_view('r', bbox)
         b_roi = self._get_roi_view('b', bbox)
         
         # 4. Local Logic
         # Check R or B > 0 in ROI
-        vessel_roi = np.bitwise_or(r_roi[:, :, 0] > 0, b_roi[:, :, 0] > 0)
+        vessel_roi = np.bitwise_or(r_roi > 0, b_roi > 0)
         paint_area = (mask_roi > 0) & vessel_roi
         
         # 5. Write Result Locally
         if self.channel == 'red':
-            r_roi[paint_area, :] = 255
-            b_roi[paint_area, :] = 0
+            r_roi[paint_area] = 255
+            b_roi[paint_area] = 0
         elif self.channel == 'blue':
-            r_roi[paint_area, :] = 0
-            b_roi[paint_area, :] = 255
+            r_roi[paint_area] = 0
+            b_roi[paint_area] = 255
     
     def _get_roi_view(self, channel_name: str, bbox: tuple):
         """Get a numpy view of a channel buffer for the specified ROI"""
-        w_img, h_img = self._channels[channel_name].get_dimensions()
         min_x, min_y, max_x, max_y = bbox
-        ptr = self._channels[channel_name]._qimage.bits()
-        full_arr = np.ndarray((h_img, w_img, 3), dtype=np.uint8, buffer=ptr)
-        return full_arr[min_y:max_y, min_x:max_x, :]
+        full_arr = self._channels[channel_name].numpy_view
+        return full_arr[min_y:max_y, min_x:max_x]
     
     def _update_alpha_channel(self):
         """Regenerate alpha channel based on current R, G, B state"""
-        w, h = self._channels['r'].get_dimensions()
-        
-        r_ptr = self._channels['r']._qimage.bits()
-        r_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=r_ptr)
-        r_data = r_pixels[:, :, 0]
-        
-        g_ptr = self._channels['g']._qimage.bits()
-        g_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=g_ptr)
-        g_data = g_pixels[:, :, 0]
-        
-        b_ptr = self._channels['b']._qimage.bits()
-        b_pixels = np.ndarray((h, w, 3), dtype=np.uint8, buffer=b_ptr)
-        b_data = b_pixels[:, :, 0]
+        r_data = self._channels['r'].numpy_view
+        g_data = self._channels['g'].numpy_view
+        b_data = self._channels['b'].numpy_view
         
         # Compute alpha: 255 where any channel is non-zero
         alpha = np.bitwise_or(np.bitwise_or(r_data, g_data), b_data).astype(np.uint8)
@@ -684,38 +662,9 @@ class OverlayLayer:
     def _flood_fill_mask(self, r_data: np.ndarray, b_data: np.ndarray, mask: np.ndarray, 
                          x: int, y: int, target_r: int, target_b: int, tolerance: int = 5):
         """
-        BFS flood fill to mark all connected pixels of similar color.
-        
-        Args:
-            r_data: Red channel data
-            b_data: Blue channel data
-            mask: Output mask to mark filled pixels
-            x, y: Starting coordinates
-            target_r, target_b: Color to match
-            tolerance: Color tolerance for matching
+        Deprecated: Use cv2.floodFill instead.
         """
-        h, w = r_data.shape
-        visited = np.zeros((h, w), dtype=bool)
-        queue = [(x, y)]
-        visited[y, x] = True
-        
-        while queue:
-            cx, cy = queue.pop(0)
-            
-            # Check if current pixel matches target color (within tolerance)
-            current_r = r_data[cy, cx]
-            current_b = b_data[cy, cx]
-            
-            if (abs(int(current_r) - int(target_r)) <= tolerance and 
-                abs(int(current_b) - int(target_b)) <= tolerance):
-                mask[cy, cx] = 1
-                
-                # Add neighbors to queue
-                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                    nx, ny = cx + dx, cy + dy
-                    if 0 <= nx < w and 0 <= ny < h and not visited[ny, nx]:
-                        visited[ny, nx] = True
-                        queue.append((nx, ny))
+        pass
 
 
 class Canvas(QGraphicsView):
@@ -748,6 +697,13 @@ class Canvas(QGraphicsView):
         # Position overlay on top of image
         self.overlay_item.setPos(0, 0)
         
+        # Create temporary stroke item for hardware accelerated preview
+        self._temp_stroke_item = QGraphicsPathItem()
+        self._temp_stroke_item.setZValue(100) # On top of everything
+        self._scene.addItem(self._temp_stroke_item)
+        self._temp_stroke_item.setVisible(False)
+        self._current_path = QPainterPath()
+
         # Create fovea marker (hidden by default)
         self.fovea_item = QGraphicsEllipseItem(0, 0, 20, 20) # 20px diameter
         color = QColor(67, 220, 250)
@@ -884,6 +840,44 @@ class Canvas(QGraphicsView):
     
     ################ PRIVATE METHODS ################
     
+    def _setup_preview_stroke(self):
+        """Configure the vector path item for the current tool"""
+        self._current_path = QPainterPath()
+        
+        # Determine color
+        if self.current_tool == "eraser":
+            # Eraser preview: Semi-transparent black
+            color = QColor(0, 0, 0, 128) 
+        else:
+            # Brush/Smart Paint: Use channel color
+            c = self.overlay_layer.channel
+            if c == 'red': 
+                color = QColor(255, 0, 0)
+            elif c == 'blue': 
+                color = QColor(0, 0, 255)
+            elif c == 'green': 
+                color = QColor(0, 255, 0)
+            elif c == 'vessels': 
+                color = QColor(255, 0, 255) 
+            else: 
+                color = QColor(255, 255, 255) 
+        
+        pen = QPen(color)
+        pen.setWidth(int(2 * self.brush_radius))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        
+        self._temp_stroke_item.setPen(pen)
+        self._temp_stroke_item.setPath(self._current_path)
+        self._temp_stroke_item.setVisible(True)
+
+    def _update_preview_stroke(self, x, y, start=False):
+        if start:
+            self._current_path.moveTo(x, y)
+        else:
+            self._current_path.lineTo(x, y)
+        self._temp_stroke_item.setPath(self._current_path)
+
     def _handle_zoom(self, event):
         """Zoom in/out on mouse cursor position"""
         # Get zoom factor
@@ -951,6 +945,11 @@ class Canvas(QGraphicsView):
         
         self.stroke_points = [(pos.x(), pos.y())]
 
+        # Setup hardware accelerated preview
+        if self.current_tool in ["brush", "smart_paint", "eraser"]:
+            self._setup_preview_stroke()
+            self._update_preview_stroke(pos.x(), pos.y(), start=True)
+
     def mouseMoveEvent(self, event):
         """Add points to current stroke"""
         if self._is_panning or self.current_tool is None or not self.stroke_points:
@@ -959,19 +958,16 @@ class Canvas(QGraphicsView):
         pos = self.mapToScene(event.position().toPoint())
         self.stroke_points.append((pos.x(), pos.y()))
         
-        # Draw only the new segment (last 2 points)
-        if len(self.stroke_points) >= 2:
-            segment = self.stroke_points[-2:]
-            if self.current_tool == "brush" and self.overlay_layer.channel != 'none':
-                self.overlay_layer._draw_brush_segment(segment, self.brush_radius)
-            elif self.current_tool == "smart_paint" and self.overlay_layer.channel != 'none':
-                self.overlay_layer._draw_smart_paint_segment(segment, self.brush_radius)
-            elif self.current_tool == "eraser" and self.overlay_layer.channel != 'none':
-                self.overlay_layer._draw_erase_segment(segment, self.brush_radius)
-            self.update_overlay_display()
+        # Update preview instead of rasterizing immediately
+        if self.current_tool in ["brush", "smart_paint", "eraser"]:
+            self._update_preview_stroke(pos.x(), pos.y())
 
     def mouseReleaseEvent(self, event):
         """Finalize the stroke by pushing to undo stack"""
+        # Hide preview
+        self._temp_stroke_item.setVisible(False)
+        self._temp_stroke_item.setPath(QPainterPath())
+
         if self.current_tool is None or len(self.stroke_points) < 2:
             self.stroke_points = []
             super().mouseReleaseEvent(event)
@@ -993,6 +989,10 @@ class Canvas(QGraphicsView):
         
         if self.current_tool != "smart_paint":
             self.overlay_layer._update_alpha_channel()
+        
+        # Ensure display is updated after the command runs
+        self.update_overlay_display()
+        
         self.stroke_points = []
 
     def wheelEvent(self, event):
