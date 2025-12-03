@@ -101,7 +101,11 @@ class ArcadeDetector(object):
         coords = np.flip(np.column_stack(bool_array), axis=1)
         return coords
     
+<<<<<<< Updated upstream
     ############ PREPROCESSING ############          
+=======
+    ############ PREPROCESSING ############
+>>>>>>> Stashed changes
 
     def dist_transform(self, min_trigger_area=1000, min_trigger_num=2, threshold_quantile=0.99):
         areas = self._compute_areas()
@@ -149,6 +153,7 @@ class ArcadeDetector(object):
     def skeleton(self):
         self.mask = (skeletonize(self.mask)*255).astype(np.uint8)    
         
+<<<<<<< Updated upstream
     def crop_around_disc(self, diameter_multiplier: float = 4):
         try:
             # Convert (col, row) to Cartesian (x, y)
@@ -174,16 +179,53 @@ class ArcadeDetector(object):
             print("Error cropping around disc:", str(e))
             print("Make sure that disc_x, disc_y and disc_diameter are specified in the database for this image.")
             
+=======
+    def crop_around_disc(self, disc_x, disc_y, width_after_cropped=450):
+        h, w = self.mask.shape
+        nasal_width = 50
+        temporal_width = width_after_cropped - nasal_width
+        try:
+            if self.eye == "left":
+                disc_x = w*0.2 if (self.disc_x > w/2) or np.isnan(self.disc_x) else self.disc_x
+                x_min = round(disc_x - nasal_width)
+                x_max = round(disc_x + temporal_width)
+            elif self.eye == "right":
+                disc_x = w*0.8 if (self.disc_x < w/2) or np.isnan(self.disc_x) else self.disc_x
+                x_min = round(disc_x - temporal_width)
+                x_max = round(disc_x + nasal_width)
+            x_min = 0 if x_min < 0 else x_min
+            x_max = w if x_max > w else x_max
+        except:
+            raise ValueError("disc_x, disc_y and/or width_after_cropped not specified")
+        self.disc_x = disc_x
+        self.disc_y = disc_y
+        self.mask = self.mask[:, x_min:x_max]
+        
+    def pad(self, pad_width =10):
+        self.mask = np.pad(self.mask, 
+                           [(0, 0), (pad_width , pad_width )], 
+                           mode='constant')
+        
+>>>>>>> Stashed changes
     def crop_to_fovea(self, disc_x, disc_y, fovea_x, fovea_y, disc_temporal_width=50):
         h, w = self.mask.shape
         try:
             if self.eye == "left":
+<<<<<<< Updated upstream
                 disc_x = w*0.2 if (disc_x > w/2) or np.isnan(disc_x) else disc_x
                 x_min = round(disc_x - disc_temporal_width)
                 x_max = round(fovea_x) if ~np.isnan(fovea_x) else round(w/2)
             elif self.eye == "right":
                 disc_x = w*0.8 if (disc_x < w/2) or np.isnan(disc_x) else disc_x
                 x_min = round(fovea_x) if ~np.isnan(fovea_x) else round(w/2)
+=======
+                disc_x = width*0.2 if (disc_x > width/2) or np.isnan(disc_x) else disc_x
+                x_min = round(disc_x - disc_temporal_width)
+                x_max = round(fovea_x) if ~np.isnan(fovea_x) else round(width/2)
+            elif self.eye == "right":
+                disc_x = width*0.8 if (disc_x < width/2) or np.isnan(disc_x) else disc_x
+                x_min = round(fovea_x) if ~np.isnan(fovea_x) else round(width/2)
+>>>>>>> Stashed changes
                 x_max = round(disc_x + disc_temporal_width)
             x_min = 0 if x_min < 0 else x_min
             x_max = w if x_max > w else x_max     
@@ -211,17 +253,28 @@ class ArcadeDetector(object):
     ############ PRIVATE METHODS ############
     
     def _compute_areas(self):
+<<<<<<< Updated upstream
         mask_ui8 = self.mask.astype(np.uint8) * 255
         output = cv2.connectedComponentsWithStats(mask_ui8, cv2.CV_32S)
+=======
+        # apply connected component analysis
+        output = cv2.connectedComponentsWithStats(self.mask, cv2.CV_32S)
+>>>>>>> Stashed changes
         (numLabels, labels, stats, centroids) = output
         areas = stats[:, cv2.CC_STAT_AREA][1:] # ignore the first element which corresponds to background pixels
         return areas
 
 
 class ArcadeLS(ArcadeDetector):
+<<<<<<< Updated upstream
     
         def __init__(self, mask):
             self.mask = mask
+=======
+        def __init__(self, name: str, mask: np.ndarray, db_manager: DatabaseManager = None):
+            super().__init__(name=name, mask=mask, db_manager=db_manager)
+            
+>>>>>>> Stashed changes
             coords = self.get_coordinates()
             self.x = coords[:,0]
             self.y = coords[:,1]
@@ -268,6 +321,7 @@ class ArcadeLS(ArcadeDetector):
             
 class ArcadeRANSAC(ArcadeDetector):
     
+<<<<<<< Updated upstream
     def __init__(self, 
                  name: str, 
                  mask: np.ndarray, 
@@ -282,6 +336,11 @@ class ArcadeRANSAC(ArcadeDetector):
         super().__call__()
         
         # Get vessel coordinates
+=======
+    def __init__(self, name: str, mask: np.ndarray, db_manager: DatabaseManager = None):
+        super().__init__(name=name, mask=mask, db_manager=db_manager)
+        
+>>>>>>> Stashed changes
         coords = self.get_coordinates()
         self.x = coords[:,0]
         self.y = coords[:,1]
@@ -400,7 +459,7 @@ class ArcadeRANSAC(ArcadeDetector):
         
     ############ PRIVATE METHODS ############
     
-    def _compute_metrics(self, model, verbose=True):
+    def _compute_metrics(self, model: str = "parabola", verbose=True):
         inliers_boolean = self.parabola.inlier_mask_
         if model == "parabola":
             self.x_predicted = self.parabola.predict(self.y_quadratic_trans)
@@ -435,7 +494,7 @@ class ArcadeRANSAC(ArcadeDetector):
                 residuals = residuals + list(self.x_inliers_2.flatten() - x_predicted)
             residuals = np.array(residuals)
         else:
-            raise nameError("model must be one of: 'parabola' or 'linear'")
+            raise ValueError("model must be one of: 'parabola' or 'linear'")
             
         median_residual = np.median(abs(residuals))
         ss_res = np.sum(residuals**2)
@@ -472,3 +531,10 @@ class ArcadeRANSAC(ArcadeDetector):
             raise NotImplementedError("Both parabola and segmented linear models must be fitted before using this")
 
 
+<<<<<<< Updated upstream
+=======
+class ArcadeAnalyzer(ArcadeDetector):
+    pass
+
+
+>>>>>>> Stashed changes
