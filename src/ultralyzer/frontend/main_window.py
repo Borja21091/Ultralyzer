@@ -1,4 +1,3 @@
-import cv2
 from pathlib import Path
 from definitions import IMAGE_FORMATS
 from PySide6.QtWidgets import (
