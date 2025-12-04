@@ -2,7 +2,7 @@
 
 ## System Requirements
 
-Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Python 3.8 or higher. The software leverages hardware acceleration for image processing and GUI rendering, so a system with a dedicated GPU is recommended for optimal performance, although not strictly necessary.
+Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Python 3.12 (tested) or higher. The software leverages hardware acceleration for image processing and GUI rendering, so a system with a dedicated GPU is recommended for optimal performance, although not strictly necessary.
 
 ## Installation Steps
 
@@ -16,12 +16,12 @@ Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Pyt
 2. **Set Up a Virtual Environment** (optional but recommended):
 
    ```bash
-   conda create -n ultralyzer_env python=3.8
+   conda create -n ultralyzer_env python=3.12
    conda activate ultralyzer_env
    ```
 
 3. **Install Dependencies**:
 
     ```bash
-    pip install -e .
+    pip install -r requirements.txt
     ```

@@ -1,0 +1,13 @@
+tqdm
+numpy
+numba
+torch
+pillow
+PySide6
+sklearn
+networkx
+SQLAlchemy
+torchvision
+scikit-image
+opencv-python
+segmentation-models-pytorch
