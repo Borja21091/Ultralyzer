@@ -1,14 +1,16 @@
 from pathlib import Path
-from definitions import IMAGE_FORMATS
+from definitions import IMAGE_FORMATS, METRIC_DICTIONARY
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QFileDialog, QMessageBox, QComboBox
+    QLabel, QFileDialog, QMessageBox, QComboBox, QTextEdit
 )
 from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
 from backend.models.segmentor import UnetSegmentor
+
+from backend.utils.threads import AVSegmentationWorker, DiscSegmentationWorker
 
 class MainWindow(QMainWindow):
     """
@@ -22,6 +24,7 @@ class MainWindow(QMainWindow):
         self._mask_folder = None
         self._db_manager = DatabaseManager()
         self._image_list = []
+        self.worker = None
         
         self._init_ui()
     
@@ -94,22 +97,49 @@ class MainWindow(QMainWindow):
         # File menu
         file_menu = menubar.addMenu("File")
         
-        open_image_folder_action = QAction("Open Image Folder", self)
-        open_image_folder_action.triggered.connect(self._on_select_image_folder)
-        file_menu.addAction(open_image_folder_action)
+        action_open_image_folder = QAction("Open Image Folder", self)
+        action_open_image_folder.triggered.connect(self._on_select_image_folder)
+        file_menu.addAction(action_open_image_folder)
         
-        load_mask_folder_action = QAction("Load Mask Folder", self)
-        load_mask_folder_action.triggered.connect(self._on_select_mask_folder)
-        file_menu.addAction(load_mask_folder_action)
+        action_load_mask_folder = QAction("Load Mask Folder", self)
+        action_load_mask_folder.triggered.connect(self._on_select_mask_folder)
+        file_menu.addAction(action_load_mask_folder)
         
         # file_menu.addSeparator()
+        
+        # Segmentation menu
+        segmentation_menu = menubar.addMenu("Segmentation")
+        
+        action_av_segment = QAction("A/V Segment", self)
+        action_av_segment.triggered.connect(self._on_av_segment)
+        segmentation_menu.addAction(action_av_segment)
+        
+        action_disc_segment = QAction("Disc Segment", self)
+        action_disc_segment.triggered.connect(self._on_disc_segment)
+        segmentation_menu.addAction(action_disc_segment)
+        
+        # Database menu
+        db_menu = menubar.addMenu("Database")
+        
+        action_export_QC = QAction("Export QC Results", self)
+        action_export_QC.triggered.connect(self._on_export_qc_results)
+        db_menu.addAction(action_export_QC)
+        
+        action_export_metrics = QAction("Export Metrics", self)
+        action_export_metrics.triggered.connect(self._on_export_metrics)
+        db_menu.addAction(action_export_metrics)
+        
         
         # Help menu
         help_menu = menubar.addMenu("Help")
         
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self._on_about)
-        help_menu.addAction(about_action)
+        action_metric_definitions = QAction("Metric Definitions", self)
+        action_metric_definitions.triggered.connect(self._on_metric_definitions)
+        help_menu.addAction(action_metric_definitions)
+        
+        action_about = QAction("About", self)
+        action_about.triggered.connect(self._on_about)
+        help_menu.addAction(action_about)
     
     ############ PUBLIC METHODS ############
     
@@ -168,6 +198,21 @@ class MainWindow(QMainWindow):
             "Ultralyzer - Retinal Image Processing Pipeline\n\nVersion 1.0"
         )
     
+    def _on_metric_definitions(self):
+        """Show metric definitions dialog"""
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Metric Definitions")
+        dialog.setText("Metric Definitions")
+        
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setMarkdown(''.join(f"<p><b>{key}</b>: {value}</p>" for key, value in METRIC_DICTIONARY.items()))
+        text_edit.setMinimumWidth(800)
+        text_edit.setMinimumHeight(600)
+        
+        dialog.layout().addWidget(text_edit, 0, 1)
+        dialog.exec()
+    
     def _on_qc_decision(self, filename: str, decision: str):
         """Handle quality control decision"""
         status = f"Decided: {filename} → {decision.upper()}"
@@ -218,4 +263,115 @@ class MainWindow(QMainWindow):
         self._load_mask_info_to_db(self._mask_folder)
         self.statusBar().showMessage(f"Loaded masks from: {self._mask_folder}")
     
+    def _on_av_segment(self):
+        """Handle A/V segmentation action"""
+        
+        # Get current image
+        img_name = self.image_dropdown.currentText()
+        if not img_name:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image to segment.")
+            return
+        
+        # Find in database
+        meta = self._db_manager.get_metadata_by_filename(img_name)
+        if not meta:
+            QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {img_name}")
+            return
+        image_path = Path(meta.folder) / Path(meta.name + meta.extension)
+        
+        # Find segmentation mask details
+        seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+        if not seg_meta:
+            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
+            return
+        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+        
+        # Perform segmentation
+        try:
+            self.statusBar().showMessage(f"Segmenting A/V for image: {img_name}")
+            self.worker = AVSegmentationWorker(self.widget.step_seg, image_path, seg_path)
+            self.worker.finished.connect(lambda success: self.statusBar().showMessage(
+                f"A/V Segmentation {'succeeded' if success else 'failed'} for image: {img_name}"
+            ))
+            self.worker.finished.connect(self.widget.display_image)
+            self.worker.start()
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Error during A/V segmentation: {str(e)}")
+            
+        # Update display
+        self.widget.display_image()
     
+    def _on_disc_segment(self):
+        """Handle Disc segmentation action"""
+        
+        # Get current image
+        img_name = self.image_dropdown.currentText()
+        if not img_name:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image to segment.")
+            return
+        
+        # Find in database
+        meta = self._db_manager.get_metadata_by_filename(img_name)
+        if not meta:
+            QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {img_name}")
+            return
+        image_path = Path(meta.folder) / Path(meta.name + meta.extension)
+        
+        # Find segmentation mask details
+        seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+        if not seg_meta:
+            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
+            return
+        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+        
+        # Perform segmentation
+        try:
+            self.statusBar().showMessage(f"Segmenting Disc for image: {img_name}")
+            self.worker = DiscSegmentationWorker(self.widget.step_seg, image_path, seg_path)
+            self.worker.finished.connect(lambda success: self.statusBar().showMessage(
+                f"Disc Segmentation {'succeeded' if success else 'failed'} for image: {img_name}"
+            ))
+            self.worker.finished.connect(self.widget.display_image)
+            self.worker.start()
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Error during disc segmentation: {str(e)}")
+    
+    def _on_export_qc_results(self):
+        """Export QC results from database"""
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save QC Results",
+            "qc_data.csv",
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        
+        if not save_path:
+            return
+        
+        try:
+            self._db_manager.export_qc_results(Path(save_path))
+            self.statusBar().showMessage(f"QC results exported to: {save_path}")
+        except Exception as e:
+            self.statusBar().showMessage(f"Error exporting QC results: {str(e)}")
+    
+    def _on_export_metrics(self):
+        """Export metrics from database"""
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Metrics",
+            "metrics_data.csv",
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        
+        if not save_path:
+            return
+        
+        try:
+            self._db_manager.export_metrics_results(Path(save_path))
+            self.statusBar().showMessage(f"Metrics exported to: {save_path}")
+        except Exception as e:
+            self.statusBar().showMessage(f"Error exporting metrics: {str(e)}")
+            
+        

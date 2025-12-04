@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 import datetime as dt
+import pandas as pd
 import enum
 import os
 
@@ -89,6 +90,11 @@ class MetricsResult(Base):
     disc_diameter_um = Column(Float, nullable=True)
     disc_area_px = Column(Float, nullable=True)
     disc_area_um = Column(Float, nullable=True)
+    disc_major_axis_px = Column(Float, nullable=True)
+    disc_major_axis_um = Column(Float, nullable=True)
+    disc_minor_axis_px = Column(Float, nullable=True)
+    disc_minor_axis_um = Column(Float, nullable=True)
+    disc_orientation_deg = Column(Float, nullable=True)
     disc_circularity = Column(Float, nullable=True)
     disc_eccentricity = Column(Float, nullable=True)
     # FOVEA
@@ -107,6 +113,7 @@ class MetricsResult(Base):
     vessel_width_px = Column(Float, nullable=True)
     vessel_width_um = Column(Float, nullable=True)
     vessel_width_gradient = Column(Float, nullable=True)
+    vessel_width_intercept_px = Column(Float, nullable=True)
     # ARTERIES
     crae = Column(Float, nullable=True)
     a_density = Column(Float, nullable=True)
@@ -117,6 +124,7 @@ class MetricsResult(Base):
     a_width_px = Column(Float, nullable=True)
     a_width_um = Column(Float, nullable=True)
     a_width_gradient = Column(Float, nullable=True)
+    a_width_intercept_px = Column(Float, nullable=True)
     a_groups = Column(Float, nullable=True)
     a_branching_points = Column(Float, nullable=True)
     a_branches = Column(Float, nullable=True)
@@ -130,6 +138,7 @@ class MetricsResult(Base):
     v_width_px = Column(Float, nullable=True)
     v_width_um = Column(Float, nullable=True)
     v_width_gradient = Column(Float, nullable=True)
+    v_width_intercept_px = Column(Float, nullable=True)
     v_groups = Column(Float, nullable=True)
     v_branching_points = Column(Float, nullable=True)
     v_branches = Column(Float, nullable=True)
@@ -408,6 +417,38 @@ class DatabaseManager:
         finally:
             session.close()
     
+    ############ QC EXPORT METHODS ############
+    
+    def export_qc_results(self, save_path: Path) -> bool:
+        """
+        Export QC results to a CSV file.
+        
+        Args:
+            save_path: Path to save the CSV file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        
+        session = self.session
+        try:
+            results = session.query(QCResult).all()
+            data = [{
+                "name": r.name,
+                "decision": r.decision,
+                "notes": r.notes,
+                "timestamp": r.timestamp
+            } for r in results]
+            df = pd.DataFrame(data)
+            df.to_csv(save_path, index=False)
+            return True
+        except Exception as e:
+            print(f"Error exporting QC results: {str(e)}")
+            return False
+        finally:
+            session.close()
+        
+        
     ############ SEGMENTATION GET METHODS ############
     
     def get_segmentation_mask_path(self, name: str) -> Path:
@@ -567,6 +608,7 @@ class DatabaseManager:
         
         finally:
             session.close()
+            
             
     ############ METRICS GET METHODS ############
     
@@ -881,6 +923,35 @@ class DatabaseManager:
         except Exception as e:
             session.rollback()
             print(f"Error saving laterality metric: {str(e)}")
+            return False
+        finally:
+            session.close()
+    
+    ############ METRICS EXPORT METHODS ############
+    
+    def export_metrics_results(self, save_path: Path) -> bool:
+        """
+        Export metrics results to a CSV file.
+        
+        Args:
+            save_path: Path to save the CSV file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        
+        session = self.session
+        try:
+            results = session.query(MetricsResult).all()
+            data = [{
+                column.name: getattr(r, column.name)
+                for column in MetricsResult.__table__.columns
+            } for r in results]
+            df = pd.DataFrame(data)
+            df.to_csv(save_path, index=False)
+            return True
+        except Exception as e:
+            print(f"Error exporting metrics results: {str(e)}")
             return False
         finally:
             session.close()

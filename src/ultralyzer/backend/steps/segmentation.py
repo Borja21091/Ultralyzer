@@ -77,7 +77,7 @@ class SegmentationStep(ProcessingStep):
                     self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
                     
             if disc_cx and loc is not None:
-                laterality = "left" if loc[1] < disc_cx else "right"
+                laterality = "rirght" if loc[1] < disc_cx else "left"
                 if metadata:
                     self.db_manager.save_metrics_laterality_by_id(id, laterality)
             
@@ -126,6 +126,23 @@ class SegmentationStep(ProcessingStep):
         )
         
         return success
+    
+    def segment_av(self, image: np.ndarray) -> tuple[np.ndarray, bool]:
+        """Segment vessels from the image using the vessel segmentor"""
+        if not self.segmentor:
+            raise ValueError("Vessel segmentor not provided")
+        
+        av_mask, _ = self.segmentor.segment(image)
+        success = av_mask is not None
+        return av_mask, success
+    
+    def segment_disc(self, image: np.ndarray) -> np.ndarray:
+        """Segment optic disc from the image using the disc segmentor"""
+        if not self.disc_segmentor:
+            raise ValueError("Disc segmentor not provided")
+        
+        disc_mask = self.disc_segmentor.segment(image)
+        return disc_mask
     
     def get_pending_images(self):
         """Get all images that need segmentation"""

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from definitions import IMAGE_FORMATS, CANVAS_BORDER_COLORS
 from frontend.widgets.canvas import Canvas
 from backend.models.database import DatabaseManager
+from backend.steps.segmentation import SegmentationStep
 
 
 class BaseWidget(QWidget):
@@ -23,6 +24,7 @@ class BaseWidget(QWidget):
         self.image_paths: List[Path] = []
         self._index = 0
         self.canvas = None
+        self.step_seg: SegmentationStep = None  # To be defined in subclasses
     
     ############ PROPERTIES ############
     
