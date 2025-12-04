@@ -57,26 +57,44 @@ class SegmentationStep(ProcessingStep):
             # Load image
             image = np.array(Image.open(image_path).convert("RGB"))
             
+            # Pre-allocate mask
+            mask = np.zeros(image.shape[:2] + (3,), dtype=np.uint8)
+            
             # Segment
             self.logger.info(f"Segmenting {Path(image_path).name}...")
-            av_mask, _ = self.segmentor.segment(image)
-
-            if self.disc_segmentor:
-                disc_mask = self.disc_segmentor.segment(image)
-                # Save disc centroid to DB
-                if any(disc_mask.flatten()) and metadata:
-                    disc_cy, disc_cx = localise_centre_mass(disc_mask)
-                    self.db_manager.save_metrics_disc_centroid_by_id(id, disc_cx, disc_cy)
-                    av_mask[..., 1] = disc_mask
             
-            if self.fovea_segmentor:
-                _, loc = self.fovea_segmentor.segment(image) # loc is (row, col) = (y, x)
-                # Save fovea location to DB
-                if loc is not None and metadata:
-                    id = metadata.id
-                    self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
-                    
-            if disc_cx and loc is not None:
+            try:
+                av_mask, _ = self.segmentor.segment(image)
+                mask[..., 0] = av_mask[..., 0]
+                mask[..., 2] = av_mask[..., 2]
+            except Exception as e:
+                self.logger.error(f"Error segmenting vessels in {image_path}: {str(e)}")
+
+            try:
+                if self.disc_segmentor:
+                    disc_mask = self.disc_segmentor.segment(image)
+                    # Save disc centroid to DB
+                    if any(disc_mask.flatten()) and metadata:
+                        disc_cy, disc_cx = localise_centre_mass(disc_mask)
+                        self.db_manager.save_metrics_disc_centroid_by_id(id, disc_cx, disc_cy)
+                        mask[..., 1] = disc_mask
+            except Exception as e:
+                self.logger.error(f"Error segmenting disc in {image_path}: {str(e)}")
+                disc_cx = None
+                disc_cy = None
+            
+            try:
+                if self.fovea_segmentor:
+                    _, loc = self.fovea_segmentor.segment(image) # loc is (row, col) = (y, x)
+                    # Save fovea location to DB
+                    if loc is not None and metadata:
+                        id = metadata.id
+                        self.db_manager.save_metrics_fovea_by_id(id, loc[1], loc[0]) # x, y
+            except Exception as e:
+                self.logger.error(f"Error segmenting fovea in {image_path}: {str(e)}")
+                loc = None
+            
+            if disc_cx and loc:
                 laterality = "rirght" if loc[1] < disc_cx else "left"
                 if metadata:
                     self.db_manager.save_metrics_laterality_by_id(id, laterality)
@@ -85,7 +103,7 @@ class SegmentationStep(ProcessingStep):
             base_name = Path(image_path).stem
             seg_folder = Path(self.output_dir)
             seg_folder.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(av_mask).save(str(seg_folder / (base_name + extension)))
+            Image.fromarray(mask).save(str(seg_folder / (base_name + extension)))
 
             self.logger.info(f"Segmentation complete: {Path(image_path).name}")
             

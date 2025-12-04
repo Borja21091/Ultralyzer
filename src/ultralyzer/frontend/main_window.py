@@ -1,5 +1,7 @@
+import cv2
+import numpy as np
 from pathlib import Path
-from definitions import IMAGE_FORMATS, METRIC_DICTIONARY
+from definitions import IMAGE_FORMATS, METRIC_DICTIONARY, SEG_DIR
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QFileDialog, QMessageBox, QComboBox, QTextEdit
@@ -188,6 +190,12 @@ class MainWindow(QMainWindow):
                 continue
             self._db_manager.set_mask_info(meta.id, mask_folder, mask_suffix)
     
+    def _save_empty_mask(self, image_path: Path, seg_path: Path):
+        """Save an empty segmentation mask to the specified path"""
+        image = cv2.imread(str(image_path))
+        empty_mask = np.zeros(image.shape[:2] + (3,), dtype=np.uint8)
+        cv2.imwrite(str(seg_path), empty_mask)
+    
     ############ ACTIONS ############
     
     def _on_about(self):
@@ -282,9 +290,20 @@ class MainWindow(QMainWindow):
         # Find segmentation mask details
         seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
         if not seg_meta:
-            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
-            return
-        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+            # Save new segmentation entry
+            seg_meta = {
+                "id": meta.id,
+                "extension": ".png",
+                "seg_folder": SEG_DIR,
+                "model_name": self.widget.step_seg.segmentor.model_name,
+                "model_version": self.widget.step_seg.segmentor.model_version
+            }
+            self._db_manager.save_segmentation_result(**seg_meta)
+            # Save empty segmentation mask
+            seg_path = Path(SEG_DIR) / Path(meta.name + seg_meta["extension"])
+            self._save_empty_mask(image_path, seg_path)
+        else:
+            seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
         
         # Perform segmentation
         try:
@@ -321,9 +340,20 @@ class MainWindow(QMainWindow):
         # Find segmentation mask details
         seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
         if not seg_meta:
-            QMessageBox.warning(self, "No Segmentation in Database", f"No segmentation result found for image: {img_name}")
-            return
-        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+            # Save new segmentation entry
+            seg_meta = {
+                "id": meta.id,
+                "extension": ".png",
+                "seg_folder": SEG_DIR,
+                "model_name": self.widget.step_seg.segmentor.model_name,
+                "model_version": self.widget.step_seg.segmentor.model_version
+            }
+            self._db_manager.save_segmentation_result(**seg_meta)
+            # Save empty segmentation mask
+            seg_path = Path(SEG_DIR) / Path(meta.name + seg_meta["extension"])
+            self._save_empty_mask(image_path, seg_path)
+        else:
+            seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
         
         # Perform segmentation
         try:
