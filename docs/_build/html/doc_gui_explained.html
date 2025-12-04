@@ -1,0 +1,265 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUI Explained &mdash; Ultralyzer 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="User Guide" href="doc_user_guide.html" />
+    <link rel="prev" title="Ultralyzer documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Ultralyzer
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">GUI Explained</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-ultralyzer">What is Ultralyzer?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#main-components">Main Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#menu-bar">1. Menu Bar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#top-navigation-bar">2. Top Navigation Bar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-workspace-central-view">3. The Workspace (Central View)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#a-image-canvas">A. Image Canvas</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#b-edit-toolbar-hidden-by-default">B. Edit Toolbar (Hidden by default)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#control-panel-bottom-section">4. Control Panel (Bottom Section)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#display-controls-left">Display Controls (Left)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quality-control-middle-left">Quality Control (Middle-Left)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#processing-actions-middle-right">Processing Actions (Middle-Right)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#batch-navigation-right">Batch &amp; Navigation (Right)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="doc_user_guide.html">User Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Ultralyzer</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">GUI Explained</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/doc_gui_explained.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="gui-explained">
+<h1>GUI Explained<a class="headerlink" href="#gui-explained" title="Link to this heading"></a></h1>
+<section id="what-is-ultralyzer">
+<h2>What is Ultralyzer?<a class="headerlink" href="#what-is-ultralyzer" title="Link to this heading"></a></h2>
+<p>Ultralyzer is a specialized software application designed for the processing, segmentation, and analysis of retinal UltraWidefield (UWF) images. It provides a streamlined pipeline to load image datasets, quality control images, perform automated segmentation of retinal structures (arteries, veins, optic disc, fovea), edit segmentation and export comprehensive vascular metrics.</p>
+<p>Ultralyzer should be compatible with Linux, Windows, and MacOS systems that support Python 3.8+ and have the required dependencies installed. Testing of the app has been carried out on Linux and MacOS devices.</p>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>Please refer to the <a class="reference internal" href="#doc_installation.md"><span class="xref myst">Installation Guide</span></a> for detailed instructions on how to set up Ultralyzer on your system.</p>
+</section>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The Graphical User Interface (GUI) is divided into a main window that handles global actions (loading files, exporting data) and a central workspace dedicated to the interactive processing of images. The layout is designed to facilitate a rapid review workflow, allowing users to navigate through large datasets efficiently while correcting segmentation errors on the fly.</p>
+<p><img alt="Overview" src="_images/gui_overview.png" /></p>
+</section>
+<section id="main-components">
+<h2>Main Components<a class="headerlink" href="#main-components" title="Link to this heading"></a></h2>
+<section id="menu-bar">
+<h3>1. Menu Bar<a class="headerlink" href="#menu-bar" title="Link to this heading"></a></h3>
+<p>Located at the very top of the window, the menu bar organizes global application commands:</p>
+<ul class="simple">
+<li><p><strong>File</strong>:</p>
+<ul>
+<li><p><strong>Open Image Folder</strong>: Select the root directory containing your retinal images.</p></li>
+<li><p><strong>Load Mask Folder</strong>: Load pre-computed segmentation masks (e.g., from external models) to match with currently loaded images.</p></li>
+</ul>
+</li>
+<li><p><strong>Segmentation</strong>:</p>
+<ul>
+<li><p><strong>A/V Segment</strong>: Triggers specific Artery/Vein segmentation algorithms.</p></li>
+<li><p><strong>Disc Segment</strong>: Triggers Optic Disc segmentation algorithms.</p></li>
+</ul>
+</li>
+<li><p><strong>Database</strong>:</p>
+<ul>
+<li><p><strong>Export QC Results</strong>: Saves the manual quality control (pass, borderline, reject) and notes to a CSV file.</p></li>
+<li><p><strong>Export Metrics</strong>: Saves the segmentation derived vascular metrics to a CSV file.</p></li>
+</ul>
+</li>
+<li><p><strong>Help</strong>:</p>
+<ul>
+<li><p><strong>Metric Definitions</strong>: Opens a reference guide explaining all the metric terms.</p></li>
+<li><p><strong>About</strong>: Version and copyright information.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="top-navigation-bar">
+<h3>2. Top Navigation Bar<a class="headerlink" href="#top-navigation-bar" title="Link to this heading"></a></h3>
+<p>Immediately below the menu bar, this area provides context about the current dataset:</p>
+<ul class="simple">
+<li><p><strong>Folder Label</strong>: Displays the name of the currently loaded image directory.</p></li>
+<li><p><strong>Image Dropdown</strong>: A searchable combo box allowing you to jump directly to a specific image file by name.</p></li>
+</ul>
+</section>
+<section id="the-workspace-central-view">
+<h3>3. The Workspace (Central View)<a class="headerlink" href="#the-workspace-central-view" title="Link to this heading"></a></h3>
+<p>This is the heart of the application, split into the Image Canvas and the Control Panel.</p>
+<section id="a-image-canvas">
+<h4>A. Image Canvas<a class="headerlink" href="#a-image-canvas" title="Link to this heading"></a></h4>
+<p>The large area displaying the retinal image and segmentation mask.</p>
+<ul class="simple">
+<li><p><strong>Interaction</strong>: Supports zooming and panning.</p></li>
+<li><p><strong>Overlays</strong>: Displays segmentation masks (Arteries in Red, Veins in Blue, Optic Disc in Green) on top of the original image.</p></li>
+</ul>
+</section>
+<section id="b-edit-toolbar-hidden-by-default">
+<h4>B. Edit Toolbar (Hidden by default)<a class="headerlink" href="#b-edit-toolbar-hidden-by-default" title="Link to this heading"></a></h4>
+<p>Appears on the right side of the canvas when <strong>“✏️ Edit Mask”</strong> is clicked. It contains tools for manual correction. A deep-dive into how to use these tools will be available soon as part of the documentation:</p>
+<ul class="simple">
+<li><p><strong>🖌️ Brush</strong>: Manually paint on the overlay (<code class="docutils literal notranslate"><span class="pre">Ctrl+B</span></code>).</p></li>
+<li><p><strong>✨ Smart Paint</strong>: Semi-automated tool that snaps to vessel edges (<code class="docutils literal notranslate"><span class="pre">Ctrl+Shift+B</span></code>).</p></li>
+<li><p><strong>🧹 Eraser</strong>: Remove incorrect segmentation areas (<code class="docutils literal notranslate"><span class="pre">Ctrl+E</span></code>).</p></li>
+<li><p><strong>⇄ Color Switch</strong>: Click a vessel to toggle its classification between Artery and Vein (<code class="docutils literal notranslate"><span class="pre">Ctrl+C</span></code>).</p></li>
+<li><p><strong>🎯 Fovea Location</strong>: Manually place the fovea center point.</p></li>
+<li><p><strong>Size Slider</strong>: Adjusts the diameter of the brush/eraser tools (<code class="docutils literal notranslate"><span class="pre">+</span></code> / <code class="docutils literal notranslate"><span class="pre">-</span></code> keys).</p></li>
+<li><p><strong>Undo/Redo</strong>: Revert or re-apply changes (<code class="docutils literal notranslate"><span class="pre">Ctrl+Z</span></code> / <code class="docutils literal notranslate"><span class="pre">Ctrl+Shift+Z</span></code>).</p></li>
+</ul>
+</section>
+</section>
+<section id="control-panel-bottom-section">
+<h3>4. Control Panel (Bottom Section)<a class="headerlink" href="#control-panel-bottom-section" title="Link to this heading"></a></h3>
+<p>The bottom area is divided into four functional groups:</p>
+<section id="display-controls-left">
+<h4>Display Controls (Left)<a class="headerlink" href="#display-controls-left" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Overlay Dropdown</strong>: Filter what is shown on the canvas (e.g., “Vessels Only”, “Red Channel”, “All”).</p>
+<ul>
+<li><p><em>Shortcuts: 1-6 keys.</em></p></li>
+</ul>
+</li>
+<li><p><strong>Show Fovea</strong>: Toggle the visibility of the fovea marker if available.</p></li>
+<li><p><strong>Opacity Slider</strong>: Adjust the transparency of the segmentation overlay against the raw image.</p></li>
+</ul>
+</section>
+<section id="quality-control-middle-left">
+<h4>Quality Control (Middle-Left)<a class="headerlink" href="#quality-control-middle-left" title="Link to this heading"></a></h4>
+<p>Used to grade the quality for the current image (not the overlay). In general terms, we usually look at the following criteria to assess an image:</p>
+<ul class="simple">
+<li><p>Field of View: Is the retina fully visible?</p></li>
+<li><p>Illumination: Is the image well-lit without excessive shadows or glare?</p></li>
+<li><p>Focus: Is the image sharp without blurriness?</p></li>
+<li><p>Artifacts: Are there any obstructions (e.g., eyelids, eyelashes) or distortions?</p></li>
+<li><p>Pathology: Are there any abnormalities that could affect analysis?</p></li>
+</ul>
+<p>Based primarily on these factors, the user can assign one of three quality grades:</p>
+<ul class="simple">
+<li><p><strong>✅ PASS</strong>: Image is of good quality for analysis.</p></li>
+<li><p><strong>⚠️ BORDERLINE</strong>: Usable but contains minor issues.</p></li>
+<li><p><strong>❌ REJECT</strong>: Image is unsuitable for analysis.</p></li>
+</ul>
+<p>The app also provides a text field for adding specific comments about the image/participant (acquisition details, medication, etc.).</p>
+<ul class="simple">
+<li><p><strong>Notes</strong>: A text field for adding specific comments about the image/participant.</p></li>
+</ul>
+</section>
+<section id="processing-actions-middle-right">
+<h4>Processing Actions (Middle-Right)<a class="headerlink" href="#processing-actions-middle-right" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>⏩ Segment Current</strong>: Runs the AI model on the currently visible image.</p></li>
+<li><p><strong>📊 Metrics</strong>: Calculates vascular metrics for the current image (requires a valid segmentation).</p></li>
+<li><p><strong>✏️ Edit Mask</strong>: Toggles the <strong>Edit Toolbar</strong> to allow manual corrections.</p></li>
+</ul>
+</section>
+<section id="batch-navigation-right">
+<h4>Batch &amp; Navigation (Right)<a class="headerlink" href="#batch-navigation-right" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>⏩ Segment All</strong>: Batch segments all “PASS” or “BORDERLINE” images.</p></li>
+<li><p><strong>📊 Metrics All</strong>: Batch calculates metrics for all “PASS” or “BORDERLINE” images.</p></li>
+<li><p><strong>◀ Previous / Next ▶</strong>: Navigates through the dataset (<code class="docutils literal notranslate"><span class="pre">Left</span></code> / <code class="docutils literal notranslate"><span class="pre">Right</span></code> arrow keys).</p></li>
+</ul>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Ultralyzer documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="doc_user_guide.html" class="btn btn-neutral float-right" title="User Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Borja Marin.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
