@@ -1,8 +1,8 @@
 from pathlib import Path
-from definitions import IMAGE_FORMATS
+from definitions import IMAGE_FORMATS, METRIC_DICTIONARY
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QFileDialog, QMessageBox, QComboBox
+    QLabel, QFileDialog, QMessageBox, QComboBox, QTextEdit
 )
 from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget
@@ -118,8 +118,24 @@ class MainWindow(QMainWindow):
         action_disc_segment.triggered.connect(self._on_disc_segment)
         segmentation_menu.addAction(action_disc_segment)
         
+        # Database menu
+        db_menu = menubar.addMenu("Database")
+        
+        action_export_QC = QAction("Export QC Results", self)
+        action_export_QC.triggered.connect(self._on_export_qc_results)
+        db_menu.addAction(action_export_QC)
+        
+        action_export_metrics = QAction("Export Metrics", self)
+        action_export_metrics.triggered.connect(self._on_export_metrics)
+        db_menu.addAction(action_export_metrics)
+        
+        
         # Help menu
         help_menu = menubar.addMenu("Help")
+        
+        action_metric_definitions = QAction("Metric Definitions", self)
+        action_metric_definitions.triggered.connect(self._on_metric_definitions)
+        help_menu.addAction(action_metric_definitions)
         
         action_about = QAction("About", self)
         action_about.triggered.connect(self._on_about)
@@ -181,6 +197,21 @@ class MainWindow(QMainWindow):
             "About Ultralyzer",
             "Ultralyzer - Retinal Image Processing Pipeline\n\nVersion 1.0"
         )
+    
+    def _on_metric_definitions(self):
+        """Show metric definitions dialog"""
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Metric Definitions")
+        dialog.setText("Metric Definitions")
+        
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setMarkdown(''.join(f"<p><b>{key}</b>: {value}</p>" for key, value in METRIC_DICTIONARY.items()))
+        text_edit.setMinimumWidth(800)
+        text_edit.setMinimumHeight(600)
+        
+        dialog.layout().addWidget(text_edit, 0, 1)
+        dialog.exec()
     
     def _on_qc_decision(self, filename: str, decision: str):
         """Handle quality control decision"""
@@ -306,6 +337,41 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             self.statusBar().showMessage(f"Error during disc segmentation: {str(e)}")
+    
+    def _on_export_qc_results(self):
+        """Export QC results from database"""
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save QC Results",
+            "qc_data.csv",
+            "CSV Files (*.csv);;All Files (*)"
+        )
         
+        if not save_path:
+            return
+        
+        try:
+            self._db_manager.export_qc_results(Path(save_path))
+            self.statusBar().showMessage(f"QC results exported to: {save_path}")
+        except Exception as e:
+            self.statusBar().showMessage(f"Error exporting QC results: {str(e)}")
     
-    
+    def _on_export_metrics(self):
+        """Export metrics from database"""
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Metrics",
+            "metrics_data.csv",
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        
+        if not save_path:
+            return
+        
+        try:
+            self._db_manager.export_metrics_results(Path(save_path))
+            self.statusBar().showMessage(f"Metrics exported to: {save_path}")
+        except Exception as e:
+            self.statusBar().showMessage(f"Error exporting metrics: {str(e)}")
+            
+        

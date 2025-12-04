@@ -206,9 +206,6 @@ class MetricsStep(ProcessingStep):
                 # Average Width
                 metrics[f"{prefix}_width_px"] = np.mean(avg_width)
                 
-                # Tortuosity FFT
-                
-                
                 # Width Gradient as the slope of the linear fit to vessel width vs distance from OD center
                 # dist = [np.sqrt((c[0] - od_center_x) ** 2 + (c[1] - od_center_y) ** 2) for c in coords]
                 dist = np.linalg.norm(coords - np.array([[od_center_y, od_center_x]]), axis=1)
@@ -218,13 +215,7 @@ class MetricsStep(ProcessingStep):
                     metrics[f"{prefix}_width_gradient"] = float(p[0])
                     metrics[f"{prefix}_width_intercept_px"] = float(p[1])
                 
-                plt.figure()
-                plt.plot(dist, np.concatenate(all_vessel_widths), 'o')
-                plt.plot(dist, np.polyval(p, dist), '-r')
-                plt.title(f'{prefix.upper()} Width vs Distance from OD Center for {name}')
-                plt.xlabel('Distance from OD Center (px)')
-                plt.ylabel('Vessel Width (px)')
-                plt.savefig(f'{name}_{prefix}_width_vs_distance.png')
+                # Tortuosity FFT
                 
             # Artery/Vein CRAE/CRVE, groups, branching points, branches
             for mask, prefix in zip([self.a_mask, self.v_mask], ["a", "v"]):

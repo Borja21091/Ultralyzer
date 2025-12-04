@@ -5,7 +5,7 @@ from skimage import morphology
 from scipy.spatial import KDTree
 from skimage.draw import polygon
 from backend.utils.graph import PathOrderer
-
+from scipy.ndimage import binary_dilation
 
 def boxcount(Z, k):
     S = np.add.reduceat(np.add.reduceat(Z,
@@ -221,8 +221,8 @@ def calculate_vessel_widths(mask, coords) -> tuple[list[np.ndarray], np.ndarray,
     # AND with segmentation mask
     mask_edges = mask_edges & (mask > 0)
     
-    # Identify the edges of the vessels (Canny edge detection)
-    mask_edges = cv2.Canny(mask_edges.astype(np.uint8), 0, 1)
+    # Identify the edges of the vessels
+    mask_edges = mask_edges.astype(np.uint8) - binary_dilation(mask_edges).astype(np.uint8)
     
     # Locate edges in the original image for each vessel
     on_pixels = np.argwhere(mask_edges).astype(np.float32)
