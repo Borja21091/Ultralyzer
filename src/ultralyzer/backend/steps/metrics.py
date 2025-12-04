@@ -1,7 +1,6 @@
 
 from skimage.morphology import skeletonize
 from skimage.measure import regionprops, label
-from definitions import METRIC_DICTIONARY
 from typing import Dict, Any
 from pathlib import Path
 from PIL import Image
@@ -13,6 +12,12 @@ from backend.utils.preprocessing import localise_centre_mass
 from backend.models.database import DatabaseManager
 from backend.steps.base_step import ProcessingStep
 from backend.utils.arcades import ArcadeRANSAC
+
+from backend.utils.feature_measurement import fractal_dimension_boxcount, fractal_dimension_sandbox
+from backend.utils.feature_measurement import curve_length, chord_length, tortuosity_density
+from backend.utils.feature_measurement import generate_vessel_skeleton, calculate_vessel_widths
+
+from matplotlib import pyplot as plt
 
 
 class MetricsStep(ProcessingStep):
@@ -159,15 +164,67 @@ class MetricsStep(ProcessingStep):
                 # Density
                 metrics[f"{prefix}_density"] = float(np.sum(mask) / mask.size)
                 
-                # Tortuosity Density
+                # Fractal Dimension (Sandbox and Boxcount)
+                metrics[f"{prefix}_fractal_dimension_sandbox"] = float(fractal_dimension_sandbox(mask.astype(int)))
+                metrics[f"{prefix}_fractal_dimension_boxcount"] = float(fractal_dimension_boxcount(mask.astype(int)))
+                
+                # Generate ordered skeleton coordinates
+                vcoords = generate_vessel_skeleton(mask.astype(np.uint8), self.od_mask, (od_center_y, od_center_x)) # [(row, col), ...]
+                
+                # Initialise vessel widths and count lists
+                tcurve = 0
+                tcc = 0
+                td = 0
+                vessel_count = 0
+                zonal_vessels = []
+                for vessel in vcoords:
+                    vessel_count += 1
+                    zonal_vessels.append(vessel)
+                    
+                    # Work out length of current vessel
+                    vessel = vessel.T
+                    v_length = curve_length(vessel[1], vessel[0])
+                    c_length = chord_length(vessel[1], vessel[0])
+                    tcc += v_length / c_length
+                            
+                    # tcurve is simply the pixel length of the vessel
+                    tcurve += v_length
+                    
+                    # td measures curve_chord_ratio for subvessel segments per inflection point 
+                    # and cumulatively add them, and scale by number of inflections and overall curve length
+                    # formula comes from https://ieeexplore.ieee.org/document/1279902
+                    td += tortuosity_density(vessel[1], vessel[0], v_length)
+                
+                # Normalise tortuosity density and tortuosity distance by vessel_count
+                metrics[f"{prefix}_tortuosity_density"] = td/vessel_count
+                metrics[f"{prefix}_tortuosity_distance"] = tcc/vessel_count
+            
+                # This is measuring the same thing as average_width computed in global_metrics, but should be smaller as 
+                # individual vessel segments exclude branching points in their calculation
+                all_vessel_widths, coords, avg_width = calculate_vessel_widths(mask.astype(np.uint8), zonal_vessels)
+                
+                # Average Width
+                metrics[f"{prefix}_width_px"] = np.mean(avg_width)
                 
                 # Tortuosity FFT
                 
-                # Fractal Dimension (Sandbox and Boxcount)
                 
-                # Average Width
+                # Width Gradient as the slope of the linear fit to vessel width vs distance from OD center
+                # dist = [np.sqrt((c[0] - od_center_x) ** 2 + (c[1] - od_center_y) ** 2) for c in coords]
+                dist = np.linalg.norm(coords - np.array([[od_center_y, od_center_x]]), axis=1)
                 
-                # Width Gradient
+                if len(dist) >= 2:
+                    p = np.polyfit(dist, np.concatenate(all_vessel_widths), 1)
+                    metrics[f"{prefix}_width_gradient"] = float(p[0])
+                    metrics[f"{prefix}_width_intercept_px"] = float(p[1])
+                
+                plt.figure()
+                plt.plot(dist, np.concatenate(all_vessel_widths), 'o')
+                plt.plot(dist, np.polyval(p, dist), '-r')
+                plt.title(f'{prefix.upper()} Width vs Distance from OD Center for {name}')
+                plt.xlabel('Distance from OD Center (px)')
+                plt.ylabel('Vessel Width (px)')
+                plt.savefig(f'{name}_{prefix}_width_vs_distance.png')
                 
             # Artery/Vein CRAE/CRVE, groups, branching points, branches
             for mask, prefix in zip([self.a_mask, self.v_mask], ["a", "v"]):

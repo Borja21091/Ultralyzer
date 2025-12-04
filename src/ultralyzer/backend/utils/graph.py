@@ -123,26 +123,12 @@ class PathOrderer:
         start_idx = [np.where((coords == start).all(axis=1))[0][0] for start in start_coords]
         
         # 2) Build NxN adjacency with broadcasting
-        adjacency = self._build_adjacency(coords)
+        adjacency = build_adjacency(coords)
         
         # 3) Reorder each connected component
         paths = self._reorder_multiple_paths(coords, adjacency, start_idx)
         
         return paths
-    
-    @numba.njit()
-    def _build_adjacency(self, coords):
-        N = coords.shape[0]
-        adjacency = np.zeros((N, N), dtype=np.bool_)
-        for i in numba.prange(N):
-            for j in range(N):
-                if i == j:
-                    continue
-                # Check if coords are within 1 row and 1 col
-                if (abs(coords[i,0] - coords[j,0]) < 2 and 
-                    abs(coords[i,1] - coords[j,1]) < 2):
-                    adjacency[i, j] = True
-        return adjacency
     
     def _reorder_multiple_paths(self, 
                                coords: np.ndarray, 
@@ -237,6 +223,20 @@ class PathOrderer:
         # Convert indices back to coordinates
         return coords_2d[order]
     
+@numba.njit()
+def build_adjacency(coords: np.ndarray) -> np.ndarray:
+    N = coords.shape[0]
+    adjacency = np.zeros((N, N), dtype=np.bool_)
+    for i in numba.prange(N):
+        for j in range(N):
+            if i == j:
+                continue
+            # Check if coords are within 1 row and 1 col
+            if (abs(coords[i,0] - coords[j,0]) < 2 and 
+                abs(coords[i,1] - coords[j,1]) < 2):
+                adjacency[i, j] = True
+    return adjacency
+
 
 class NetworkAnalyzer:
     

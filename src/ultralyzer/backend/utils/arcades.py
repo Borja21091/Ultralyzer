@@ -291,8 +291,6 @@ class ArcadeRANSAC(ArcadeDetector):
         # Model fitting
         self.fit_parabola()
         
-        self.display_parabola()
-        
     ############ PARABOLA ############
     
     def fit_parabola(self):

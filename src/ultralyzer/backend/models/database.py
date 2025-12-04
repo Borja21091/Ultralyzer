@@ -112,6 +112,7 @@ class MetricsResult(Base):
     vessel_width_px = Column(Float, nullable=True)
     vessel_width_um = Column(Float, nullable=True)
     vessel_width_gradient = Column(Float, nullable=True)
+    vessel_width_intercept_px = Column(Float, nullable=True)
     # ARTERIES
     crae = Column(Float, nullable=True)
     a_density = Column(Float, nullable=True)
@@ -122,6 +123,7 @@ class MetricsResult(Base):
     a_width_px = Column(Float, nullable=True)
     a_width_um = Column(Float, nullable=True)
     a_width_gradient = Column(Float, nullable=True)
+    a_width_intercept_px = Column(Float, nullable=True)
     a_groups = Column(Float, nullable=True)
     a_branching_points = Column(Float, nullable=True)
     a_branches = Column(Float, nullable=True)
@@ -135,6 +137,7 @@ class MetricsResult(Base):
     v_width_px = Column(Float, nullable=True)
     v_width_um = Column(Float, nullable=True)
     v_width_gradient = Column(Float, nullable=True)
+    v_width_intercept_px = Column(Float, nullable=True)
     v_groups = Column(Float, nullable=True)
     v_branching_points = Column(Float, nullable=True)
     v_branches = Column(Float, nullable=True)

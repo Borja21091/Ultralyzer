@@ -92,6 +92,7 @@ METRIC_DICTIONARY = {
     "vessel_width_px" : "Average vessel width in pixels",
     "vessel_width_um" : "Average vessel width in micrometers",
     "vessel_width_gradient" : "Gradient of vessel width along the vessel length",
+    "vessel_width_intercept_px" : "Y-intercept of vessel width linear fit. Theoretically, vessel width at distance 0 from OD center in pixels",
     # ARTERIES
     "crae" : "Central Retinal Artery Equivalent",
     "a_density" : "Ratio of artery pixels to total image pixels",
@@ -102,6 +103,7 @@ METRIC_DICTIONARY = {
     "a_width_px" : "Average artery width in pixels",
     "a_width_um" : "Average artery width in micrometers",
     "a_width_gradient" : "Gradient of artery width along the artery length",
+    "a_width_intercept_px" : "Y-intercept of artery width linear fit. Theoretically, artery width at distance 0 from OD center in pixels",
     "a_groups" : "Number of independent artery groups",
     "a_branching_points" : "Average number of artery branching points per independent artery group",
     "a_branches" : "Average number of artery branches per independent artery group",
@@ -115,6 +117,7 @@ METRIC_DICTIONARY = {
     "v_width_px" : "Average vein width in pixels",
     "v_width_um" : "Average vein width in micrometers",
     "v_width_gradient" : "Gradient of vein width along the vein length",
+    "v_width_intercept_px" : "Y-intercept of vein width linear fit. Theoretically, vein width at distance 0 from OD center in pixels",
     "v_groups" : "Number of independent vein groups",
     "v_branching_points" : "Average number of vein branching points per independent vein group",
     "v_branches" : "Average number of vein branches per independent vein group",
