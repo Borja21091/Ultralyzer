@@ -26,6 +26,7 @@ Ultralyzer is designed to work with retinal UltraWidefield (UWF) images for segm
 - An artery inside the optic disc should appear as yellow `(255, 255, 0)`.
 - A vein inside the optic disc should appear as cyan `(0, 255, 255)`.
 - A crossing of an artery and a vein inside the optic disc should appear as white `(255, 255, 255)`.
+- If masks have been generated using an external tool, images and masks **must** be in two different folders.
 
 ## 1. Loading Data
 
@@ -49,8 +50,11 @@ Classify images to filter them for analysis:
     - **✅ PASS**: Good quality, ready for metrics.
     - **⚠️ BORDERLINE**: Usable but has minor issues.
     - **❌ REJECT**: Poor quality and unusable.
+4. As soon as you make a decision, the border around the image canvas will change color to reflect your choice.
 
-## 3. Segmentation Workflow
+---
+
+## 3. Automated Segmentation
 
 ### Automated Segmentation
 

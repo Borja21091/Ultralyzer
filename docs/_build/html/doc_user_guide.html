@@ -49,8 +49,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#getting-started">Getting Started</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#loading-data">1. Loading Data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#quality-control">2. Quality Control</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#segmentation-workflow">3. Segmentation Workflow</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#automated-segmentation">Automated Segmentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#automated-segmentation">3. Automated Segmentation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Automated Segmentation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#visualization-controls">Visualization Controls</a></li>
 </ul>
 </li>
@@ -125,6 +125,7 @@
 <li><p>An artery inside the optic disc should appear as yellow <code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">255,</span> <span class="pre">0)</span></code>.</p></li>
 <li><p>A vein inside the optic disc should appear as cyan <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">255,</span> <span class="pre">255)</span></code>.</p></li>
 <li><p>A crossing of an artery and a vein inside the optic disc should appear as white <code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">255,</span> <span class="pre">255)</span></code>.</p></li>
+<li><p>If masks have been generated using an external tool, images and masks <strong>must</strong> be in two different folders.</p></li>
 </ul>
 </section>
 <section id="loading-data">
@@ -156,12 +157,14 @@
 <li><p><strong>❌ REJECT</strong>: Poor quality and unusable.</p></li>
 </ul>
 </li>
+<li><p>As soon as you make a decision, the border around the image canvas will change color to reflect your choice.</p></li>
 </ol>
 </section>
-<section id="segmentation-workflow">
-<h2>3. Segmentation Workflow<a class="headerlink" href="#segmentation-workflow" title="Link to this heading"></a></h2>
+<hr class="docutils" />
 <section id="automated-segmentation">
-<h3>Automated Segmentation<a class="headerlink" href="#automated-segmentation" title="Link to this heading"></a></h3>
+<h2>3. Automated Segmentation<a class="headerlink" href="#automated-segmentation" title="Link to this heading"></a></h2>
+<section id="id1">
+<h3>Automated Segmentation<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
 <p>You can run the AI models directly within the app:</p>
 <ul class="simple">
 <li><p><strong>Single Image</strong>: Click <code class="docutils literal notranslate"><span class="pre">⏩</span> <span class="pre">Segment</span> <span class="pre">Current</span></code> in the right-hand panel.</p></li>
