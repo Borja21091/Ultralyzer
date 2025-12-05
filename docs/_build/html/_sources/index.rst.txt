@@ -16,8 +16,8 @@ documentation for details.
    :caption: Contents:
 
    doc_gui_explained
-   doc_user_guide
    doc_installation
+   doc_user_guide
 
 Indices and tables
 ==================

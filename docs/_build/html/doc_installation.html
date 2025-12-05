@@ -19,7 +19,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="User Guide" href="doc_user_guide.html" /> 
+    <link rel="next" title="User Guide" href="doc_user_guide.html" />
+    <link rel="prev" title="GUI Explained" href="doc_gui_explained.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,12 +45,12 @@
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="doc_gui_explained.html">GUI Explained</a></li>
-<li class="toctree-l1"><a class="reference internal" href="doc_user_guide.html">User Guide</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#system-requirements">System Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#installation-steps">Installation Steps</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="doc_user_guide.html">User Guide</a></li>
 </ul>
 
         </div>
@@ -80,7 +81,7 @@
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
 <section id="system-requirements">
 <h2>System Requirements<a class="headerlink" href="#system-requirements" title="Link to this heading"></a></h2>
-<p>Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Python 3.8 or higher. The software leverages hardware acceleration for image processing and GUI rendering, so a system with a dedicated GPU is recommended for optimal performance, although not strictly necessary.</p>
+<p>Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Python 3.12 (tested) or higher. The software leverages hardware acceleration for image processing and GUI rendering, so a system with a dedicated GPU is recommended for optimal performance, although not strictly necessary.</p>
 </section>
 <section id="installation-steps">
 <h2>Installation Steps<a class="headerlink" href="#installation-steps" title="Link to this heading"></a></h2>
@@ -92,13 +93,18 @@
 </div>
 </li>
 <li><p><strong>Set Up a Virtual Environment</strong> (optional but recommended):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>ultralyzer_env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.8
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>ultralyzer_env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.12
 conda<span class="w"> </span>activate<span class="w"> </span>ultralyzer_env
 </pre></div>
 </div>
 </li>
 <li><p><strong>Install Dependencies</strong>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+</pre></div>
+</div>
+</li>
+<li><p><strong>Run the Application</strong>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>src/ultralyzer/main.py
 </pre></div>
 </div>
 </li>
@@ -110,7 +116,8 @@ conda<span class="w"> </span>activate<span class="w"> </span>ultralyzer_env
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="doc_user_guide.html" class="btn btn-neutral float-left" title="User Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="doc_gui_explained.html" class="btn btn-neutral float-left" title="GUI Explained" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="doc_user_guide.html" class="btn btn-neutral float-right" title="User Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

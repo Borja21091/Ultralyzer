@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Ultralyzer documentation" href="index.html" /> 
+    <link rel="prev" title="Installation" href="doc_installation.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -43,18 +43,18 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="doc_gui_explained.html">GUI Explained</a></li>
+<li class="toctree-l1"><a class="reference internal" href="doc_installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">User Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#getting-started">1. Getting Started</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#loading-data">Loading Data</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#navigation">Navigation</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#segmentation-workflow">2. Segmentation Workflow</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#getting-started">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#loading-data">1. Loading Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quality-control">2. Quality Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#segmentation-workflow">3. Segmentation Workflow</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#automated-segmentation">Automated Segmentation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#visualization-controls">Visualization Controls</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#editing-correction">3. Editing &amp; Correction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#editing-correction">4. Editing &amp; Correction</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#tools">Tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#brush-controls">Brush Controls</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#saving-edits">Saving Edits</a></li>
@@ -94,25 +94,72 @@
   <section id="user-guide">
 <h1>User Guide<a class="headerlink" href="#user-guide" title="Link to this heading"></a></h1>
 <section id="getting-started">
-<h2>1. Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h2>
+<h2>Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h2>
+<p>Ultralyzer is designed to work with retinal UltraWidefield (UWF) images for segmentation and analysis. This guide will walk you through the basic workflow. In a nutshell, you will:</p>
+<ol class="arabic simple">
+<li><p>Load your image dataset and possibly existing masks.</p></li>
+<li><p>Quality control (QC) the images <code class="docutils literal notranslate"><span class="pre">{PASS,</span> <span class="pre">BORDERLINE,</span> <span class="pre">REJECT}</span></code>.</p></li>
+<li><p>Run automated segmentation. Only images marked as <code class="docutils literal notranslate"><span class="pre">PASS</span></code> or <code class="docutils literal notranslate"><span class="pre">BORDERLINE</span></code> will be processed.</p></li>
+<li><p>Edit segmentation masks if necessary (most likely).</p>
+<ul class="simple">
+<li><p>Arteries and veins should be uninterrupted vessel paths. Pay special attention to crossings.</p></li>
+<li><p>The optic disc should be a complete blob (no holes).</p></li>
+<li><p>The fovea should be correctly located at the center of the foveal avascular zone.</p></li>
+<li><p><strong>Save your edits frequently!</strong></p></li>
+</ul>
+</li>
+<li><p>Compute metrics based on the final segmentation masks.</p></li>
+<li><p>Export QC results or metrics to CSV files.</p></li>
+</ol>
+<p>⚠️ <strong>Notes</strong> ⚠️</p>
+<ul class="simple">
+<li><p>Masks follow the same naming as the images, except for the extension which will always be <code class="docutils literal notranslate"><span class="pre">.png</span></code> for the masks. For example, if your image is <code class="docutils literal notranslate"><span class="pre">img_001.tif</span></code>, the corresponding mask will also be <code class="docutils literal notranslate"><span class="pre">img_001.png</span></code>.</p></li>
+<li><p>Arteries, veins and optic disc are painted in the masks using specific colors (RGB):</p>
+<ul>
+<li><p>Arteries <strong><code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">0,</span> <span class="pre">0)</span></code></strong> → red</p></li>
+<li><p>Veins <strong><code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">0,</span> <span class="pre">255)</span></code></strong> → blue</p></li>
+<li><p>Optic Disc <strong><code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">255,</span> <span class="pre">0)</span></code></strong> → green</p></li>
+</ul>
+</li>
+<li><p>An artery &amp; vein crossing should appear as a continuous red and blue path, with no interruptions. Hence, its color at the crossing point will be magenta <code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">0,</span> <span class="pre">255)</span></code>.</p></li>
+<li><p>An artery inside the optic disc should appear as yellow <code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">255,</span> <span class="pre">0)</span></code>.</p></li>
+<li><p>A vein inside the optic disc should appear as cyan <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">255,</span> <span class="pre">255)</span></code>.</p></li>
+<li><p>A crossing of an artery and a vein inside the optic disc should appear as white <code class="docutils literal notranslate"><span class="pre">(255,</span> <span class="pre">255,</span> <span class="pre">255)</span></code>.</p></li>
+</ul>
+</section>
 <section id="loading-data">
-<h3>Loading Data<a class="headerlink" href="#loading-data" title="Link to this heading"></a></h3>
+<h2>1. Loading Data<a class="headerlink" href="#loading-data" title="Link to this heading"></a></h2>
 <ol class="arabic simple">
 <li><p><strong>Images</strong>: Go to <code class="docutils literal notranslate"><span class="pre">File</span> <span class="pre">&gt;</span> <span class="pre">Open</span> <span class="pre">Image</span> <span class="pre">Folder</span></code>. Select the directory containing your retinal images (supported formats: PNG, JPG, TIFF, BMP).</p></li>
 <li><p><strong>Existing Masks</strong>: If you have pre-computed masks, go to <code class="docutils literal notranslate"><span class="pre">File</span> <span class="pre">&gt;</span> <span class="pre">Load</span> <span class="pre">Mask</span> <span class="pre">Folder</span></code>. The app will match masks to images by filename.</p></li>
 </ol>
 </section>
-<section id="navigation">
-<h3>Navigation<a class="headerlink" href="#navigation" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><strong>Next/Previous Image</strong>: Use the <code class="docutils literal notranslate"><span class="pre">◀</span> <span class="pre">Prev</span></code> / <code class="docutils literal notranslate"><span class="pre">Next</span> <span class="pre">▶</span></code> buttons or the <strong>Left/Right Arrow keys</strong>.</p></li>
-<li><p><strong>Dropdown</strong>: Jump to a specific image using the dropdown menu at the top of the window.</p></li>
-</ul>
-</section>
-</section>
 <hr class="docutils" />
+<section id="quality-control">
+<h2>2. Quality Control<a class="headerlink" href="#quality-control" title="Link to this heading"></a></h2>
+<p>Classify images to filter them for analysis:</p>
+<ol class="arabic simple">
+<li><p>Asses image quality visually based on the following criteria:</p>
+<ul class="simple">
+<li><p><strong>Field of View</strong>: Is the retina fully visible?</p></li>
+<li><p><strong>Illumination</strong>: Is the image well-lit without excessive shadows or glare?</p></li>
+<li><p><strong>Focus</strong>: Is the image sharp without blurriness?</p></li>
+<li><p><strong>Artifacts</strong>: Are there any obstructions (e.g., eyelids, eyelashes) or distortions?</p></li>
+<li><p><strong>Pathology</strong>: Are there any abnormalities that could affect analysis?</p></li>
+</ul>
+</li>
+<li><p>Add optional <strong>Notes</strong> in the text box.</p></li>
+<li><p>Click a decision button:</p>
+<ul class="simple">
+<li><p><strong>✅ PASS</strong>: Good quality, ready for metrics.</p></li>
+<li><p><strong>⚠️ BORDERLINE</strong>: Usable but has minor issues.</p></li>
+<li><p><strong>❌ REJECT</strong>: Poor quality and unusable.</p></li>
+</ul>
+</li>
+</ol>
+</section>
 <section id="segmentation-workflow">
-<h2>2. Segmentation Workflow<a class="headerlink" href="#segmentation-workflow" title="Link to this heading"></a></h2>
+<h2>3. Segmentation Workflow<a class="headerlink" href="#segmentation-workflow" title="Link to this heading"></a></h2>
 <section id="automated-segmentation">
 <h3>Automated Segmentation<a class="headerlink" href="#automated-segmentation" title="Link to this heading"></a></h3>
 <p>You can run the AI models directly within the app:</p>
@@ -132,7 +179,7 @@
 </section>
 <hr class="docutils" />
 <section id="editing-correction">
-<h2>3. Editing &amp; Correction<a class="headerlink" href="#editing-correction" title="Link to this heading"></a></h2>
+<h2>4. Editing &amp; Correction<a class="headerlink" href="#editing-correction" title="Link to this heading"></a></h2>
 <p>If the automated segmentation needs correction, enter <strong>Edit Mode</strong> by clicking <code class="docutils literal notranslate"><span class="pre">✏️</span> <span class="pre">Edit</span> <span class="pre">Mask</span></code>.</p>
 <section id="tools">
 <h3>Tools<a class="headerlink" href="#tools" title="Link to this heading"></a></h3>
@@ -161,18 +208,6 @@
 <hr class="docutils" />
 <section id="quality-control-qc">
 <h2>4. Quality Control (QC)<a class="headerlink" href="#quality-control-qc" title="Link to this heading"></a></h2>
-<p>Classify images to filter them for analysis:</p>
-<ol class="arabic simple">
-<li><p>Review the segmentation.</p></li>
-<li><p>Add optional <strong>Notes</strong> in the text box.</p></li>
-<li><p>Click a decision button:</p>
-<ul class="simple">
-<li><p><strong>✅ PASS</strong>: Good quality, ready for metrics.</p></li>
-<li><p><strong>⚠️ BORDERLINE</strong>: Usable but has minor issues.</p></li>
-<li><p><strong>❌ REJECT</strong>: Poor quality or segmentation failure.</p></li>
-</ul>
-</li>
-</ol>
 </section>
 <hr class="docutils" />
 <section id="exporting-results">
@@ -292,7 +327,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="index.html" class="btn btn-neutral float-left" title="Ultralyzer documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="doc_installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
   <hr/>

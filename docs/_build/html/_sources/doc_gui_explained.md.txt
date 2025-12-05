@@ -4,11 +4,7 @@
 
 Ultralyzer is a specialized software application designed for the processing, segmentation, and analysis of retinal UltraWidefield (UWF) images. It provides a streamlined pipeline to load image datasets, quality control images, perform automated segmentation of retinal structures (arteries, veins, optic disc, fovea), edit segmentation and export comprehensive vascular metrics.
 
-Ultralyzer should be compatible with Linux, Windows, and MacOS systems that support Python 3.8+ and have the required dependencies installed. Testing of the app has been carried out on Linux and MacOS devices.
-
-## Installation
-
-Please refer to the [Installation Guide](doc_installation.md) for detailed instructions on how to set up Ultralyzer on your system.
+Ultralyzer should be compatible with Linux, Windows, and MacOS systems that support Python 3.12 (tested) or higher and have the required dependencies installed. Testing of the app has been carried out on Linux and MacOS devices.
 
 ## Overview
 
@@ -72,21 +68,12 @@ The bottom area is divided into four functional groups:
 #### Display Controls (Left)
 
 * **Overlay Dropdown**: Filter what is shown on the canvas (e.g., "Vessels Only", "Red Channel", "All").
-  * *Shortcuts: 1-6 keys.*
 * **Show Fovea**: Toggle the visibility of the fovea marker if available.
 * **Opacity Slider**: Adjust the transparency of the segmentation overlay against the raw image.
 
 #### Quality Control (Middle-Left)
 
-Used to grade the quality for the current image (not the overlay). In general terms, we usually look at the following criteria to assess an image:
-
-* Field of View: Is the retina fully visible?
-* Illumination: Is the image well-lit without excessive shadows or glare?
-* Focus: Is the image sharp without blurriness?
-* Artifacts: Are there any obstructions (e.g., eyelids, eyelashes) or distortions?
-* Pathology: Are there any abnormalities that could affect analysis?
-  
-Based primarily on these factors, the user can assign one of three quality grades:
+Used to grade the quality for the current image, not the segmentation overlay. The user can assign one of three quality grades:
 
 * **✅ PASS**: Image is of good quality for analysis.
 * **⚠️ BORDERLINE**: Usable but contains minor issues.

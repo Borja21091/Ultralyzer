@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="User Guide" href="doc_user_guide.html" />
+    <link rel="next" title="Installation" href="doc_installation.html" />
     <link rel="prev" title="Ultralyzer documentation" href="index.html" /> 
 </head>
 
@@ -46,7 +46,6 @@
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">GUI Explained</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#what-is-ultralyzer">What is Ultralyzer?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#main-components">Main Components</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#menu-bar">1. Menu Bar</a></li>
@@ -67,6 +66,7 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="doc_installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="doc_user_guide.html">User Guide</a></li>
 </ul>
 
@@ -99,11 +99,7 @@
 <section id="what-is-ultralyzer">
 <h2>What is Ultralyzer?<a class="headerlink" href="#what-is-ultralyzer" title="Link to this heading"></a></h2>
 <p>Ultralyzer is a specialized software application designed for the processing, segmentation, and analysis of retinal UltraWidefield (UWF) images. It provides a streamlined pipeline to load image datasets, quality control images, perform automated segmentation of retinal structures (arteries, veins, optic disc, fovea), edit segmentation and export comprehensive vascular metrics.</p>
-<p>Ultralyzer should be compatible with Linux, Windows, and MacOS systems that support Python 3.8+ and have the required dependencies installed. Testing of the app has been carried out on Linux and MacOS devices.</p>
-</section>
-<section id="installation">
-<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
-<p>Please refer to the <a class="reference internal" href="#doc_installation.md"><span class="xref myst">Installation Guide</span></a> for detailed instructions on how to set up Ultralyzer on your system.</p>
+<p>Ultralyzer should be compatible with Linux, Windows, and MacOS systems that support Python 3.12 (tested) or higher and have the required dependencies installed. Testing of the app has been carried out on Linux and MacOS devices.</p>
 </section>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
@@ -181,26 +177,14 @@
 <section id="display-controls-left">
 <h4>Display Controls (Left)<a class="headerlink" href="#display-controls-left" title="Link to this heading"></a></h4>
 <ul class="simple">
-<li><p><strong>Overlay Dropdown</strong>: Filter what is shown on the canvas (e.g., “Vessels Only”, “Red Channel”, “All”).</p>
-<ul>
-<li><p><em>Shortcuts: 1-6 keys.</em></p></li>
-</ul>
-</li>
+<li><p><strong>Overlay Dropdown</strong>: Filter what is shown on the canvas (e.g., “Vessels Only”, “Red Channel”, “All”).</p></li>
 <li><p><strong>Show Fovea</strong>: Toggle the visibility of the fovea marker if available.</p></li>
 <li><p><strong>Opacity Slider</strong>: Adjust the transparency of the segmentation overlay against the raw image.</p></li>
 </ul>
 </section>
 <section id="quality-control-middle-left">
 <h4>Quality Control (Middle-Left)<a class="headerlink" href="#quality-control-middle-left" title="Link to this heading"></a></h4>
-<p>Used to grade the quality for the current image (not the overlay). In general terms, we usually look at the following criteria to assess an image:</p>
-<ul class="simple">
-<li><p>Field of View: Is the retina fully visible?</p></li>
-<li><p>Illumination: Is the image well-lit without excessive shadows or glare?</p></li>
-<li><p>Focus: Is the image sharp without blurriness?</p></li>
-<li><p>Artifacts: Are there any obstructions (e.g., eyelids, eyelashes) or distortions?</p></li>
-<li><p>Pathology: Are there any abnormalities that could affect analysis?</p></li>
-</ul>
-<p>Based primarily on these factors, the user can assign one of three quality grades:</p>
+<p>Used to grade the quality for the current image, not the segmentation overlay. The user can assign one of three quality grades:</p>
 <ul class="simple">
 <li><p><strong>✅ PASS</strong>: Image is of good quality for analysis.</p></li>
 <li><p><strong>⚠️ BORDERLINE</strong>: Usable but contains minor issues.</p></li>
@@ -236,7 +220,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Ultralyzer documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="doc_user_guide.html" class="btn btn-neutral float-right" title="User Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="doc_installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

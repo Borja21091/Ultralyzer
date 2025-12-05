@@ -25,3 +25,9 @@ Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Pyt
     ```bash
     pip install -r requirements.txt
     ```
+
+4. **Run the Application**:
+
+    ```bash
+    python src/ultralyzer/main.py
+    ```
