@@ -61,6 +61,8 @@ Appears on the right side of the canvas when **"✏️ Edit Mask"** is clicked. 
 * **Size Slider**: Adjusts the diameter of the brush/eraser tools (`+` / `-` keys).
 * **Undo/Redo**: Revert or re-apply changes (`Ctrl+Z` / `Ctrl+Shift+Z`).
 
+![Edit Toolbar](./_static/images/edit_toolbar.png)
+
 ### 4. Control Panel (Bottom Section)
 
 The bottom area is divided into four functional groups:
