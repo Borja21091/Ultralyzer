@@ -3,11 +3,13 @@ numpy
 numba
 torch
 pillow
+pandas
 PySide6
-sklearn
 networkx
 SQLAlchemy
+bottleneck
 torchvision
 scikit-image
+scikit-learn
 opencv-python
 segmentation-models-pytorch
