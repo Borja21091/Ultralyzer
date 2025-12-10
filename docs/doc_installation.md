@@ -22,8 +22,17 @@ Ultralyzer is compatible with Linux, Windows, and MacOS systems that support Pyt
 
 3. **Install Dependencies**:
 
+   - For Windows, double-click on the `install.bat` or run it from the command line:
+
     ```bash
-    pip install -r requirements.txt
+    install.bat
+    ```
+
+   - For Linux and MacOS, run the following command in the terminal:
+
+    ```bash
+    chmod +x install.sh
+    bash install.sh
     ```
 
 4. **Run the Application**:
