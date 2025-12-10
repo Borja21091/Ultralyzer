@@ -2,6 +2,9 @@
 *.pt
 *.DS_Store
 
+# Avoid 'test' folders being tracked by git
+test/
+
 # Avoid any SQL database files being tracked by git
 *.db
 *.sqlite3
@@ -13,6 +16,12 @@ __pycache__/
 
 # C extensions
 *.so
+
+# MATLAB extensions
+*.mex*
+*.m
+*.asv
+*.p
 
 # Distribution / packaging
 .Python
@@ -77,7 +86,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-# docs/_build/
+docs/_build/
 
 # PyBuilder
 .pybuilder/
