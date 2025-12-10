@@ -1,9 +1,0 @@
-# GUI Explained
-
-## Overview
-
-The Graphical User Interface (GUI) of our application is designed to provide an intuitive and user-friendly experience. This document explains the various components and functionalities of the GUI to help users navigate and utilize the application effectively.
-
-## Main Components
-
-1. **Menu Bar**: Located at the top of the application window, the menu bar provides access to various options such as File, , and Help. Each menu contains a dropdown list of related commands.
