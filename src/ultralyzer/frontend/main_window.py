@@ -10,7 +10,6 @@ from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
-from backend.models.segmentor import UnetSegmentor
 
 from backend.utils.threads import AVSegmentationWorker, DiscSegmentationWorker
 
@@ -164,8 +163,7 @@ class MainWindow(QMainWindow):
     
     def _create_widget(self) -> BaseWidget:
         """Create the appropriate widget for the selected step"""
-        segmentor = UnetSegmentor()
-        widget = SegmentationWidget(segmentor, self._db_manager)
+        widget = SegmentationWidget(self._db_manager)
         widget.decision_made.connect(self._on_qc_decision)
         widget.status_text.connect(self.statusBar().showMessage)
         return widget

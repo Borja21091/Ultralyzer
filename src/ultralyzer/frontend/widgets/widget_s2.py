@@ -16,8 +16,8 @@ from backend.models.database import DatabaseManager
 from backend.steps.segmentation import SegmentationStep
 from frontend.widgets.canvas import ImageLayer, OverlayLayer
 from definitions import IMAGE_CHANNEL_MAP, OVERLAY_MAP, BLANK_STATE
-from backend.models.segmentor import UWFFoveaSegmentor, UWFDiscSegmentor
 from PySide6.QtGui import QShortcut, QKeySequence, QCursor, QPixmap, QPainter
+from backend.models.segmentor import UWFFoveaSegmentor, UWFDiscSegmentor, UWFAVSegmentor
 
 from backend.utils.threads import SingleMetricsWorker, BatchMetricsWorker
 from backend.utils.threads import SingleSegmentationWorker, BatchSegmentationWorker
@@ -30,11 +30,13 @@ class SegmentationWidget(BaseWidget):
     status_text = Signal(str)
     decision_made = Signal(str, str) # filename, decision
     
-    def __init__(self, segmentor: Segmentor, db_manager: DatabaseManager = None):
+    def __init__(self, 
+                 db_manager: DatabaseManager = None, 
+                 av_segmentor: Segmentor = UWFAVSegmentor(), 
+                 disc_segmentor: Segmentor = UWFDiscSegmentor(), 
+                 fovea_segmentor: Segmentor = UWFFoveaSegmentor()):
         super().__init__(db_manager)
-        disc_segmentor = UWFDiscSegmentor()
-        fovea_segmentor = UWFFoveaSegmentor()
-        self.step_seg = SegmentationStep(segmentor, 
+        self.step_seg = SegmentationStep(av_segmentor=av_segmentor, 
                                          disc_segmentor=disc_segmentor, 
                                          fovea_segmentor=fovea_segmentor,
                                          db_manager=self.db_manager)

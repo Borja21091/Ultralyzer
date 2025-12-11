@@ -14,7 +14,7 @@ class SegmentationStep(ProcessingStep):
     
     def __init__(
         self,
-        segmentor: Segmentor,
+        av_segmentor: Segmentor,
         db_manager: DatabaseManager = None,
         output_dir: Path = None,
         disc_segmentor: Segmentor = None,
@@ -22,7 +22,7 @@ class SegmentationStep(ProcessingStep):
         vessel_segmentor: Segmentor = None):
         
         super().__init__("Segmentation", 2)
-        self.segmentor = segmentor
+        self.av_segmentor = av_segmentor
         self.disc_segmentor = disc_segmentor
         self.fovea_segmentor = fovea_segmentor
         self.vessel_segmentor = vessel_segmentor
@@ -64,7 +64,7 @@ class SegmentationStep(ProcessingStep):
             self.logger.info(f"Segmenting {Path(image_path).name}...")
             
             try:
-                av_mask, _ = self.segmentor.segment(image)
+                av_mask, _ = self.av_segmentor.segment(image)
                 mask[..., 0] = av_mask[..., 0]
                 mask[..., 2] = av_mask[..., 2]
             except Exception as e:
@@ -139,18 +139,18 @@ class SegmentationStep(ProcessingStep):
             id=id,
             extension=extension,
             seg_folder=result["seg_folder"],
-            model_name=self.segmentor.model_name,
-            model_version=self.segmentor.model_version
+            model_name=self.av_segmentor.model_name,
+            model_version=self.av_segmentor.model_version
         )
         
         return success
     
     def segment_av(self, image: np.ndarray) -> tuple[np.ndarray, bool]:
         """Segment vessels from the image using the vessel segmentor"""
-        if not self.segmentor:
+        if not self.av_segmentor:
             raise ValueError("Vessel segmentor not provided")
         
-        av_mask, _ = self.segmentor.segment(image)
+        av_mask, _ = self.av_segmentor.segment(image)
         success = av_mask is not None
         return av_mask, success
     

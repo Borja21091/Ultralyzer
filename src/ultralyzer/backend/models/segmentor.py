@@ -6,7 +6,7 @@ from torchvision import tv_tensors
 from abc import ABC, abstractmethod
 from pathlib import Path, PosixPath, PurePath
 from backend.models.unet.model import UNetModel
-from definitions import UNET_MODEL_DIR, MODELS_DIR, MODEL_BASE_URL_UWF
+from definitions import MODELS_DIR, MODEL_BASE_URL_UWF
 from backend.utils.preprocessing import preprocess_image, get_bounding_box, find_vessels, get_mask, get_uwf_transform
 from backend.utils.preprocessing import preprocess_uwf_disc_fov_loc_seg, process_uwf_disc_map, localise_centre_mass, process_uwf_fov_map
 
@@ -144,35 +144,74 @@ class Segmentor(ABC):
         return mask
 
 
-class UnetSegmentor(Segmentor):
-    """Unet-based segmentation model"""
+class UWFAVSegmentor(Segmentor):
     
-    def __init__(self, patchsize: int = 128):
-        super().__init__("unet", "1.0")
-        self.model = UNetModel(
-            n_channels=3,
-            n_classes=4,
-            kernel_size=3,
-            mc=1024,
-            bilinear=False
-        ).to(DEVICE)
-        
-        if DEVICE == 'cpu':
-            weights_path = Path(UNET_MODEL_DIR) / "model_trained_cpu.pt"
-        else:
-            weights_path = Path(UNET_MODEL_DIR) / "model_trained.pt"
-        self.model.load_state_dict(torch.load(
-            weights_path,
-            weights_only=True,
-            map_location=DEVICE
-        ))
-        
-        self.model.eval()
-        
-        self.patchsize = patchsize
+    DEFAULT_MODEL_NAME = 'av_segmentation.pt'
+    DEFAULT_MODEL_URL = MODEL_BASE_URL_UWF + '/' + DEFAULT_MODEL_NAME
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_MODEL_PATH = os.path.join(MODELS_DIR, 'uwf', DEFAULT_MODEL_NAME)
 
+    def __init__(self, model_path=DEFAULT_MODEL_URL, threshold=DEFAULT_THRESHOLD, local_model_path=DEFAULT_MODEL_PATH):
+        """
+        Core inference class for UWF artery/vein segmentation model
+        """
+        super().__init__("uwf_av_segmentor", "1.0")
+        self._patchsize = 256
+        self._batch = 32
+        
+        self._threshold = threshold
+        self.device = DEVICE
+        self.model = UNetModel(n_channels=3, 
+                               n_classes=4, 
+                               kernel_size=3, 
+                               mc=1024, bilinear=False).to(self.device)
+        
+        if not os.path.exists(local_model_path):
+            torch.hub.load_state_dict_from_url(model_path, os.path.join(MODELS_DIR, 'uwf'), map_location=self.device)
+        
+        self.model.load_state_dict(torch.load(local_model_path, map_location=self.device))
+            
+        if self.device != "cpu":
+            print("UWF Artery/Vein segmentation has been loaded with GPU acceleration!")
+        self.model.eval()
+
+    def __call__(self, x):
+        """Direct call for inference on single image"""
+        return self.segment(x)
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}(threshold={self.threshold})'
+    
+    ############ PROPERTIES ############
+    
+    @property
+    def patchsize(self):
+        return self._patchsize
+    
+    @patchsize.setter
+    def patchsize(self, value: int):
+        self._patchsize = value
+    
+    @property
+    def batch(self):
+        return self._batch
+    
+    @batch.setter
+    def batch(self, value: int):
+        self._batch = value
+    
+    @property
+    def threshold(self):
+        return self._threshold
+    
+    @threshold.setter
+    def threshold(self, value: float):
+        self._threshold = value
+    
+    ############ PUBLIC METHODS ############
+    
     def segment(self, image) -> Tuple[np.ndarray, np.ndarray]:
-        """Create segmentation mask"""
+        """Create segmentation mask for arteries and veins"""
         if isinstance(image, (str, PurePath, PosixPath)):
             image = np.array(Image.open(image).convert('RGB'))
         elif isinstance(image, Image.Image):
@@ -191,7 +230,9 @@ class UnetSegmentor(Segmentor):
         vessel_mask, cmap = find_vessels(imout)
 
         return cmap, vessel_mask
-        
+    
+    ############ PRIVATE METHODS ############
+    
     def _segment(self, 
                  image: np.ndarray, 
                  patchsize: int = 512, 

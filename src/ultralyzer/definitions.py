@@ -7,11 +7,10 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(ROOT_DIR, ".db")
 
 # MODEL DIRECTORY
-UNET_MODEL_DIR = os.path.join(ROOT_DIR, "backend", "models", "unet", "weights")
 MODELS_DIR = os.path.join(ROOT_DIR, "backend", "models")
 
 # MODEL DOWNLOAD BASE URL
-MODEL_BASE_URL_UWF = 'https://github.com/Borja21091/palloryzer/releases/download/uwf_model_weights'
+MODEL_BASE_URL_UWF = 'https://github.com/Borja21091/Ultralyzer/releases/download/model_weights/'
 
 # SEGMENTATION DIRECTORY
 SEG_DIR = os.path.join(ROOT_DIR, ".seg")

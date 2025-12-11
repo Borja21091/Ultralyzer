@@ -9,7 +9,7 @@ import urllib.request
 
 # --- CONFIGURATION ---
 # URL to the folder/release containing your 3 zip files.
-BASE_URL = "https://github.com/Borja21091/Ultralyzer/releases/download/v0.1.0/"
+WHEELS_URL = "https://github.com/Borja21091/Ultralyzer/releases/download/wheels/"
 
 def get_os_key():
     """Returns the OS key used in the zip filename."""
@@ -132,7 +132,7 @@ def main():
     # 1. Determine OS and URL
     os_key = get_os_key()
     zip_filename = f"wheels-{os_key}-latest.zip"
-    url = f"{BASE_URL}{zip_filename}"
+    url = f"{WHEELS_URL}{zip_filename}"
     
     # Setup temporary directory
     temp_dir = "wheels"
