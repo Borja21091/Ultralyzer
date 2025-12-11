@@ -107,8 +107,6 @@ class MainWindow(QMainWindow):
         action_load_mask_folder.triggered.connect(self._on_select_mask_folder)
         file_menu.addAction(action_load_mask_folder)
         
-        # file_menu.addSeparator()
-        
         # Segmentation menu
         segmentation_menu = menubar.addMenu("Segmentation")
         
@@ -122,6 +120,23 @@ class MainWindow(QMainWindow):
         
         # Database menu
         db_menu = menubar.addMenu("Database")
+        
+        # Assign QC All submenu
+        qc_assign_all_menu = db_menu.addMenu("Assign QC All")
+        
+        action_qc_pass_all = QAction("Pass", self)
+        action_qc_pass_all.triggered.connect(lambda: self._on_assign_qc_all("pass"))
+        qc_assign_all_menu.addAction(action_qc_pass_all)
+        
+        action_qc_borderline_all = QAction("Borderline", self)
+        action_qc_borderline_all.triggered.connect(lambda: self._on_assign_qc_all("borderline"))
+        qc_assign_all_menu.addAction(action_qc_borderline_all)
+        
+        action_qc_reject_all = QAction("Reject", self)
+        action_qc_reject_all.triggered.connect(lambda: self._on_assign_qc_all("reject"))
+        qc_assign_all_menu.addAction(action_qc_reject_all)
+        
+        db_menu.addSeparator()
         
         action_export_QC = QAction("Export QC Results", self)
         action_export_QC.triggered.connect(self._on_export_qc_results)
@@ -368,6 +383,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"Error during disc segmentation: {str(e)}")
     
+    def _on_assign_qc_all(self, decision: str):
+        """Assign QC decision to all images in the current list"""
+        if not self.image_list:
+            QMessageBox.warning(self, "No Images", "No images loaded to assign QC.")
+            return
+            
+        # Create message box explicitly to better control focus/default
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Confirm Batch Assignment")
+        msg_box.setText(f"Are you sure you want to assign '{decision.upper()}' to all {len(self.image_list)} images?")
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        
+        yes_btn = msg_box.addButton(QMessageBox.StandardButton.Yes)
+        no_btn = msg_box.addButton(QMessageBox.StandardButton.No)
+        
+        msg_box.setDefaultButton(no_btn)
+        
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == yes_btn:
+            count = 0
+            for image_name in self.image_list:
+                name = Path(image_name).stem
+                if self._db_manager.save_qc_result(name, decision):
+                    count += 1
+            
+            self.statusBar().showMessage(f"Assigned {decision.upper()} to {count} / {len(self.image_list)} images.")
+            
+            # Refresh current image display to show new status
+            self.widget.display_image()
+
     def _on_export_qc_results(self):
         """Export QC results from database"""
         save_path, _ = QFileDialog.getSaveFileName(
