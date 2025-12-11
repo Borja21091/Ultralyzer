@@ -1,11 +1,11 @@
 import os
 import sys
-import platform
-import urllib.request
-import zipfile
-import shutil
-import subprocess
 import glob
+import shutil
+import zipfile
+import platform
+import subprocess
+import urllib.request
 
 # --- CONFIGURATION ---
 # URL to the folder/release containing your 3 zip files.
