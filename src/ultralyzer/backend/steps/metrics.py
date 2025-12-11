@@ -3,10 +3,10 @@ from skimage.morphology import skeletonize
 from skimage.measure import regionprops, label
 from typing import Dict, Any
 from pathlib import Path
+import uwf_eye_geometry
 from PIL import Image
 import numpy as np
 import logging
-import ctypes
 
 from backend.utils.preprocessing import localise_centre_mass
 from backend.models.database import DatabaseManager
@@ -15,7 +15,8 @@ from backend.utils.arcades import ArcadeRANSAC
 
 from backend.utils.feature_measurement import fractal_dimension_boxcount, fractal_dimension_sandbox
 from backend.utils.feature_measurement import curve_length, chord_length, tortuosity_density
-from backend.utils.feature_measurement import generate_vessel_skeleton, calculate_vessel_widths
+from backend.utils.feature_measurement import generate_vessel_skeleton, compute_edges
+from backend.utils.feature_measurement import calculate_vessel_widths_px, calculate_vessel_widths_mm
 
 from matplotlib import pyplot as plt
 
@@ -104,12 +105,9 @@ class MetricsStep(ProcessingStep):
                 metrics["disc_circularity"] = float((4 * np.pi * props.area) / (props.perimeter ** 2)) * float((1 - 0.5 / ((props.perimeter / (2*np.pi)) + 0.5))**2) if props.perimeter > 0 else 0.0
 
                 # Conversion to microns
-                if self.mex_flag:
-                    # TODO: Call MEX function to convert pixels to microns
-                    pass
-                else:
-                    self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping optic disc micron metrics for {name}.")
-                    
+                disc_um_metrics = self._compute_disc_um_metrics(metrics)
+                metrics.update(disc_um_metrics)
+                
                 # Save to DB
                 self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
             
@@ -137,11 +135,13 @@ class MetricsStep(ProcessingStep):
                         (fovY - discY) / np.abs(fovX - discX + 1e-6))))
                     
                     # Conversion to microns
-                    if self.mex_flag:
-                        pass
-                    else:
-                        self.logger.warning(f"Micron conversion MEX file not provided or not found. Skipping OD-Fovea micron metrics for {name}.")
-                        
+                    metrics["disc_fovea_distance_um"] = float(
+                        uwf_eye_geometry.calculate_pair_distances(
+                            np.array([[metrics["disc_center_x"], metrics["disc_center_y"]]]).astype(np.float64),
+                            np.array([[fovea_center_x, fovea_center_y]]).astype(np.float64)
+                        ) * 1e3
+                    )
+                    
                     # Save to DB
                     self.db_manager.save_metrics_by_id(seg_metadata.id, metrics)
             else:
@@ -201,19 +201,31 @@ class MetricsStep(ProcessingStep):
             
                 # This is measuring the same thing as average_width computed in global_metrics, but should be smaller as 
                 # individual vessel segments exclude branching points in their calculation
-                all_vessel_widths, coords, avg_width = calculate_vessel_widths(mask.astype(np.uint8), zonal_vessels)
+                edges1, edges2, centerline_coords = compute_edges(mask.astype(np.uint8), zonal_vessels)
+                all_vessel_widths, avg_width = calculate_vessel_widths_px(edges1, edges2)
+                all_vessel_widths_mm, avg_width_mm = calculate_vessel_widths_mm(edges1, edges2)
                 
                 # Average Width
                 metrics[f"{prefix}_width_px"] = np.mean(avg_width)
+                metrics[f"{prefix}_width_um"] = np.mean(avg_width_mm) * 1e3
                 
                 # Width Gradient as the slope of the linear fit to vessel width vs distance from OD center
                 # dist = [np.sqrt((c[0] - od_center_x) ** 2 + (c[1] - od_center_y) ** 2) for c in coords]
-                dist = np.linalg.norm(coords - np.array([[od_center_y, od_center_x]]), axis=1)
+                dist = np.linalg.norm(centerline_coords - np.array([[od_center_y, od_center_x]]), axis=1)
+                dist_mm = uwf_eye_geometry.calculate_pair_distances(
+                                    centerline_coords[:, ::-1].astype(np.float64),
+                                    np.tile(np.array([[od_center_x, od_center_y]]), (centerline_coords.shape[0], 1)).astype(np.float64),
+                                )
                 
                 if len(dist) >= 2:
                     p = np.polyfit(dist, np.concatenate(all_vessel_widths), 1)
-                    metrics[f"{prefix}_width_gradient"] = float(p[0])
+                    metrics[f"{prefix}_width_gradient_px"] = float(p[0])
                     metrics[f"{prefix}_width_intercept_px"] = float(p[1])
+                    
+                if len(dist_mm) >= 2:
+                    p_mm = np.polyfit(dist_mm, np.concatenate(all_vessel_widths_mm), 1)
+                    metrics[f"{prefix}_width_gradient_um"] = float(p_mm[0]) * 1e3
+                    metrics[f"{prefix}_width_intercept_um"] = float(p_mm[1]) * 1e3
                 
                 # Tortuosity FFT
                 
@@ -293,5 +305,80 @@ class MetricsStep(ProcessingStep):
         """Get all images that need segmentation"""
         metadata = self.db_manager.get_pending_metrics()
         return sorted(metadata, key=lambda x: x.name)
+    
+    ################ PRIVATE METHODS ################
+    
+    def _compute_disc_um_metrics(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """Compute optic disc metrics in microns"""
+        disc_um_metrics = {}
+        try:
+            
+            # Convert center to 3D coordinates
+            center_px = np.array([[metrics["disc_center_x"], metrics["disc_center_y"]]])
+            radius_px = metrics["disc_diameter_px"] / 2.0
+            edge_points_px = np.array([np.array([metrics["disc_center_x"], metrics["disc_center_y"]]) + radius_px * np.array([np.cos(theta), -np.sin(theta)])
+                                       for theta in np.linspace(0, 2*np.pi, num=360, endpoint=False)])
+            points_3d = uwf_eye_geometry.pixels_to_3d(np.vstack((center_px, edge_points_px)))
+            center_3d = points_3d[0, :]
+            edge_points_3d = points_3d[1:, :]
+            N = edge_points_3d.shape[0]
+            
+            center_vector = center_3d / np.linalg.norm(center_3d)
+            
+            # Project edge points directly onto center vector to get distance of base plane from origin
+            # projections = R * cos(theta)
+            projections = np.dot(edge_points_3d, center_vector)
+            
+            # Spherical cap height: h = R - R * cos(theta)
+            h = np.mean(np.linalg.norm(center_3d) - projections) * 1e3  # in micrometers
+            
+            R = 12000 # Eye radius in microns
+            disc_area_um = 2 * np.pi * R * h  # in micrometers squared
+            
+            # Geodesic Diameter (Arc length)
+            disc_diameter_um = uwf_eye_geometry.calculate_pair_distances(
+                edge_points_px[0:N//2 - 1, :], edge_points_px[N//2:N - 1, :]
+            ) * 1e3 # in micrometers
+            disc_diameter_um = np.mean(disc_diameter_um)
+            
+            # Convert major/minor axes to microns
+            # 1. Get 2D axis endpoints in pixel space
+            orientation_rad = np.radians(metrics["disc_orientation_deg"])
+            major_axis_coords_px = np.array([
+                [metrics["disc_center_x"] - (metrics["disc_major_axis_px"] / 2) * np.sin(orientation_rad),
+                 metrics["disc_center_y"] + (metrics["disc_major_axis_px"] / 2) * np.cos(orientation_rad)],
+                [metrics["disc_center_x"] + (metrics["disc_major_axis_px"] / 2) * np.sin(orientation_rad),
+                 metrics["disc_center_y"] - (metrics["disc_major_axis_px"] / 2) * np.cos(orientation_rad)]
+            ])
+            minor_axis_coords_px = np.array([
+                [metrics["disc_center_x"] - (metrics["disc_minor_axis_px"] / 2) * np.cos(orientation_rad),
+                 metrics["disc_center_y"] - (metrics["disc_minor_axis_px"] / 2) * np.sin(orientation_rad)],
+                [metrics["disc_center_x"] + (metrics["disc_minor_axis_px"] / 2) * np.cos(orientation_rad), 
+                 metrics["disc_center_y"] + (metrics["disc_minor_axis_px"] / 2) * np.sin(orientation_rad)]
+            ])
+            # 2. Calculate distance in between endpoints in 3D space
+            major_axis_um = uwf_eye_geometry.calculate_pair_distances(
+                major_axis_coords_px[0,:].astype(np.float64).reshape(1, -1),
+                major_axis_coords_px[1,:].astype(np.float64).reshape(1, -1)
+            ) * 1e3  # in micrometers
+            minor_axis_um = uwf_eye_geometry.calculate_pair_distances(
+                minor_axis_coords_px[0,:].astype(np.float64).reshape(1, -1),
+                minor_axis_coords_px[1,:].astype(np.float64).reshape(1, -1)
+            ) * 1e3  # in micrometers
+            
+            disc_um_metrics = {
+                "disc_area_um": float(disc_area_um),
+                "disc_diameter_um": float(disc_diameter_um),
+                "disc_major_axis_um": float(major_axis_um),
+                "disc_minor_axis_um": float(minor_axis_um),
+            }
+            
+            # Update main metrics dictionary
+            metrics.update(disc_um_metrics)
+            
+        except Exception as e:
+            self.logger.error(f"Error converting optic disc metrics to microns: {str(e)}")
+            
+        return disc_um_metrics
     
     

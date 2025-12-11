@@ -6,6 +6,7 @@ from scipy.spatial import KDTree
 from skimage.draw import polygon
 from backend.utils.graph import PathOrderer
 from scipy.ndimage import binary_dilation
+import uwf_eye_geometry
 
 def boxcount(Z, k):
     S = np.add.reduceat(np.add.reduceat(Z,
@@ -194,7 +195,68 @@ def tortuosity_density(x, y, v_length):
 
 ############### VESSEL WIDTH ###############
 
-def calculate_vessel_widths(mask, coords) -> tuple[list[np.ndarray], np.ndarray, list[float]]:
+def calculate_vessel_widths_px(edges1: list[np.ndarray], 
+                            edges2: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
+    """
+    Calculate vessel widths at each point giving the edges of the vessel segments.
+    Vessels are divided into segments at branching points, and for each segment, the width at each point along the segment is calculated as the Euclidean distance between the two edges.
+    The edges should be provided as two lists of numpy arrays, where each array contains the coordinates of one edge of each vessel in (row, column) format.
+    
+    Parameters:
+    ----------
+        edges (list of numpy.ndarray): List of arrays containing the coordinates of one edge of each vessel.
+    
+    Returns:
+    -------
+        tuple: A tuple containing:
+            - widths (list of numpy.ndarray): List of arrays containing the widths at each point along each vessel segment.
+            - avg_width (list of float): List of average widths for each vessel segment.
+    
+    """
+    
+    # Calculate vessel width at each point + average width
+    widths = [np.linalg.norm(e1 - e2, axis=1) for e1, e2 in zip(edges1, edges2)]
+    avg_width = [np.mean(w, dtype=float) for w in widths]
+    
+    return widths, avg_width
+
+def calculate_vessel_widths_mm(edges1: list[np.ndarray], 
+                               edges2: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
+    """
+    Calculate vessel widths in millimeters at each point giving the edges of the vessel segments.
+    Vessels are divided into segments at branching points, and for each segment, the width at each point along the segment is calculated as the Euclidean distance between the two edges.
+    The edges should be provided as two lists of numpy arrays, where each array contains the coordinates of one edge of each vessel in (row, column) format.
+    
+    Parameters:
+    ----------
+        edges (list of numpy.ndarray): List of arrays containing the coordinates of one edge of each vessel segment.
+        
+    Returns:
+    -------
+        tuple: A tuple containing:
+            - widths_mm (list of numpy.ndarray): List of arrays containing the widths in millimeters at each point along each vessel segment.
+            - avg_width_mm (list of float): List of average widths in millimeters for each vessel segment.
+    """
+    
+    widths_mm = []
+    avg_width_mm = []
+    
+    for e1, e2 in zip(edges1, edges2):
+        # Convert (row, col) to (col, row) for the library
+        # Ensure contiguous arrays of float64
+        p1 = np.ascontiguousarray(e1[:, ::-1], dtype=np.float64)
+        p2 = np.ascontiguousarray(e2[:, ::-1], dtype=np.float64)
+        
+        # Calculate geodesic distances
+        # Default radius is 12.0mm (approx human eye radius)
+        w = uwf_eye_geometry.calculate_pair_distances(p1, p2)
+        
+        widths_mm.append(w)
+        avg_width_mm.append(np.mean(w))
+        
+    return widths_mm, avg_width_mm
+
+def compute_edges(mask: np.ndarray, coords: list) -> tuple[list[np.ndarray], list[np.ndarray], np.ndarray]:
     
     # Refine coordinates
     coords_refined = refine_coords(coords) # dtype = np.int16
@@ -230,11 +292,7 @@ def calculate_vessel_widths(mask, coords) -> tuple[list[np.ndarray], np.ndarray,
     edges1 = [on_pixels[tree.query(e)[1]] for e in edges1]
     edges2 = [on_pixels[tree.query(e)[1]] for e in edges2]
     
-    # Calculate vessel width at each point + average width
-    widths = [np.linalg.norm(e1 - e2, axis=1) for e1, e2 in zip(edges1, edges2)]
-    avg_width = [np.mean(w, dtype=float) for w in widths]
-    
-    return widths, r_c, avg_width
+    return edges1, edges2, r_c
 
 def refine_coords(coords: list[np.ndarray], dtype: type = np.int16):
     return [refine_path(c).astype(dtype) for c in coords]
@@ -261,5 +319,6 @@ def compute_vessel_edges(coords: list[np.ndarray], dist_map: np.ndarray):
         edges2.append(np.stack([r_edge2, c_edge2], axis=1))
         
     return edges1, edges2
+
 
 
