@@ -25,6 +25,7 @@ Located at the very top of the window, the menu bar organizes global application
   * **A/V Segment**: Triggers specific Artery/Vein segmentation algorithms.
   * **Disc Segment**: Triggers Optic Disc segmentation algorithms.
 * **Database**:
+  * **Assign QC All**: Bulk assign a quality control decision (`PASS`, `BORDERLINE`, `REJECT`) to all loaded images.
   * **Export QC Results**: Saves the manual quality control (pass, borderline, reject) and notes to a CSV file.
   * **Export Metrics**: Saves the segmentation derived vascular metrics to a CSV file.
 * **Help**:

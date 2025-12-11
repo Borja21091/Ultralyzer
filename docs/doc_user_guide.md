@@ -52,6 +52,12 @@ Classify images to filter them for analysis:
     - **❌ REJECT**: Poor quality and unusable.
 4. As soon as you make a decision, the border around the image canvas will change color to reflect your choice.
 
+💡 Tip 💡
+
+If you want to bulk assign a QC decision to all images in your folder, go to `Database > Assign QC All` and select the desired option.
+
+![Assign QC All](./_static/images/qc_bulk_assign.png)
+
 ---
 
 ## 3. Automated Segmentation
