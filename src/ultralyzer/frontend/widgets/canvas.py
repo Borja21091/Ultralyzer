@@ -289,7 +289,7 @@ class OverlayLayer:
         self._undo_stack.undo()
         self._is_dirty = True
         self._pixmap_dirty = True
-        if self._undo_stack.count() == 0:
+        if not self._undo_stack.canUndo():
             self._is_dirty = False
     
     def redo(self):

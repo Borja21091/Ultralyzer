@@ -875,14 +875,6 @@ class SegmentationWidget(BaseWidget):
             self.status_text.emit(("No images to segment"))
             return
         
-        if self.canvas.overlay_layer.has_changes():
-            QMessageBox.warning(
-                self,
-                "Unsaved Edits",
-                "Please save your edits (Ctrl/Command + S) before re-segmenting the image."
-            )
-            return
-        
         self.status_text.emit(f"Segmenting {len(pending)} images...")
         self.btn_segment_all.setEnabled(False)
         self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["highlighted"])
@@ -903,14 +895,6 @@ class SegmentationWidget(BaseWidget):
         """Segment only the currently displayed image"""
         if not self.image_path:
             self.status_text.emit("No image loaded")
-            return
-        
-        if self.canvas.overlay_layer.has_changes():
-            QMessageBox.warning(
-                self,
-                "Unsaved Edits",
-                "Please save your edits (Ctrl/Command + S) before re-segmenting the image."
-            )
             return
         
         self.status_text.emit(f"Segmenting {self.image_path.name}...")
@@ -1057,6 +1041,14 @@ class SegmentationWidget(BaseWidget):
             self.status_text.emit("No image loaded")
             return
         
+        if self.canvas.overlay_layer.has_changes():
+            QMessageBox.warning(
+                self,
+                "Unsaved Edits",
+                "Please save your edits (Ctrl/Command + S) before calculating metrics."
+            )
+            return
+        
         self.status_text.emit(f"Calculating metrics for {self.image_path.name}...")
         self.btn_metrics_current.setEnabled(False)
         self.btn_metrics_current.setStyleSheet(self.button_styles["segment"]["highlighted"])
@@ -1088,6 +1080,14 @@ class SegmentationWidget(BaseWidget):
         
         if not pending:
             self.status_text.emit(("No images to calculate metrics for"))
+            return
+        
+        if self.canvas.overlay_layer.has_changes():
+            QMessageBox.warning(
+                self,
+                "Unsaved Edits",
+                "Please save your edits (Ctrl/Command + S) before re-segmenting the image."
+            )
             return
         
         self.status_text.emit(f"Calculating metrics for {len(pending)} images...")
