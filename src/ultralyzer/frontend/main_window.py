@@ -26,6 +26,7 @@ class MainWindow(QMainWindow):
         self._db_manager = DatabaseManager()
         self._image_list = []
         self.worker = None
+        self.widget: BaseWidget = None
         
         self._init_ui()
     
@@ -53,9 +54,6 @@ class MainWindow(QMainWindow):
     
     def _init_ui(self):
         """Initialize main window UI"""
-        
-        # Create menu bar
-        self._create_menu_bar()
         
         # Initialize window
         self.setWindowTitle("Ultralyzer - Retinal Image Processing Pipeline")
@@ -90,6 +88,9 @@ class MainWindow(QMainWindow):
         
         # Status bar
         self.statusBar().showMessage("Ready")
+        
+        # Create top menu bar
+        self._create_menu_bar()
     
     def _create_menu_bar(self):
         """Create the application menu bar"""
@@ -108,6 +109,12 @@ class MainWindow(QMainWindow):
         
         # Segmentation menu
         segmentation_menu = menubar.addMenu("Segmentation")
+        
+        action_save_segmentation = QAction("Save Segmentation", self)
+        action_save_segmentation.triggered.connect(self.widget._save_edits)
+        segmentation_menu.addAction(action_save_segmentation)
+        
+        segmentation_menu.addSeparator()
         
         action_av_segment = QAction("A/V Segment", self)
         action_av_segment.triggered.connect(self._on_av_segment)

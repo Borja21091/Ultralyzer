@@ -794,6 +794,7 @@ class SegmentationWidget(BaseWidget):
         
     def _save_edits(self):
         """Save current overlay edits"""
+        
         # Get the RGB array from overlay
         overlay_array = self.canvas.overlay_layer.get_array()
         

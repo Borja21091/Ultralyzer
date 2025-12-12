@@ -124,6 +124,14 @@ class BaseWidget(QWidget):
         """
         pass
     
+    def _save_edits(self):
+        """
+        Save current edits as a RGB image.
+        
+        To be implemented in subclasses.
+        """
+        pass
+    
     def display_image(self):
         """
         Display the current image in the canvas.
