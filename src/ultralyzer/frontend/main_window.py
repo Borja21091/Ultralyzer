@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         # Segmentation menu
         segmentation_menu = menubar.addMenu("Segmentation")
         
-        action_save_segmentation = QAction("Save Segmentation", self)
+        action_save_segmentation = QAction("Save", self)
         action_save_segmentation.triggered.connect(self.widget._save_edits)
         segmentation_menu.addAction(action_save_segmentation)
         

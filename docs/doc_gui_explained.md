@@ -22,6 +22,7 @@ Located at the very top of the window, the menu bar organizes global application
   * **Open Image Folder**: Select the root directory containing your retinal images.
   * **Load Mask Folder**: Load pre-computed segmentation masks (e.g., from external models) to match with currently loaded images.
 * **Segmentation**:
+  * **Save**: Saves the current segmentation mask to disk.
   * **A/V Segment**: Triggers specific Artery/Vein segmentation algorithms.
   * **Disc Segment**: Triggers Optic Disc segmentation algorithms.
 * **Database**:
