@@ -682,6 +682,11 @@ class SegmentationWidget(BaseWidget):
         # Set channel and overlay
         self.canvas.set_image_channel(self.channel)
         self.canvas.set_overlay_channel(self.overlay)
+        
+        # Restore active tool if in edit mode
+        if self.edit_mode and self.active_tool:
+            self.canvas.set_tool(self.active_tool)
+            self._update_brush_cursor()
 
     def _highlight_decision(self, decision: str):
         """Highlight decision button"""
