@@ -5,6 +5,9 @@
 # Avoid 'test' folders being tracked by git
 test/
 
+# Binaries
+.bin/
+
 # Avoid any SQL database files being tracked by git
 *.db
 *.sqlite3

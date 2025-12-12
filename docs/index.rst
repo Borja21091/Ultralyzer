@@ -13,6 +13,7 @@ Ultralyzer documentation
    doc_gui_explained
    doc_installation
    doc_user_guide
+   doc_appendix
 
 Indices and tables
 ==================

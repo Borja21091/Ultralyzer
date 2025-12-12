@@ -4,7 +4,7 @@ from PIL import Image
 from typing import Tuple, Any
 from torchvision import tv_tensors
 from abc import ABC, abstractmethod
-from pathlib import Path, PosixPath, PurePath
+from pathlib import PosixPath, PurePath
 from backend.models.unet.model import UNetModel
 from definitions import MODELS_DIR, MODEL_BASE_URL_UWF
 from backend.utils.preprocessing import preprocess_image, get_bounding_box, find_vessels, get_mask, get_uwf_transform

@@ -52,7 +52,7 @@ Classify images to filter them for analysis:
     - **❌ REJECT**: Poor quality and unusable.
 4. As soon as you make a decision, the border around the image canvas will change color to reflect your choice.
 
-💡 Tip 💡
+💡 **Tip** 💡
 
 If you want to bulk assign a QC decision to all images in your folder, go to `Database > Assign QC All` and select the desired option.
 
@@ -66,14 +66,14 @@ If you want to bulk assign a QC decision to all images in your folder, go to `Da
 
 You can run the AI models directly within the app:
 
-- **Single Image**: Click `⏩ Segment Current` in the right-hand panel.
-- **Batch Processing**: Click `⏩ Segment All` to process every image in the loaded folder.
-- **Specific Models**: Use the `Segmentation` menu to run specific tasks like `A/V Segment` or `Disc Segment`.
+- **Single Image**: Click `⏩ Segment Current` in the bottom panel.
+- **Batch Processing**: Click `⏩ Segment All` to process every image in the loaded folder with a QC status `{PASS, BORDERLINE}`.
+- **Specific Models**: Use the `Segmentation` top menu to run specific tasks like `A/V Segment` or `Disc Segment`.
 
 ### Visualization Controls
 
-- **Opacity**: Use the vertical slider on the left to adjust the transparency of the segmentation overlay.
-- **Channels**: Toggle specific overlay views (Arteries, Veins, Optic Disc) using the dropdown or shortcuts (see below).
+- **Opacity**: Use the vertical slider on the bottom-left to adjust the transparency of the segmentation overlay.
+- **Channels**: Toggle specific image/overlay views using the dropdown or [shortcuts](./doc_appendix.md#keyboard-shortcuts#view--overlay-controls).
 
 ---
 
@@ -96,13 +96,29 @@ If the automated segmentation needs correction, enter **Edit Mode** by clicking 
 ### Saving Edits
 
 - **Save (`Ctrl+S`)**: Saves the current mask to the disk.
-- **Undo/Redo**: `Ctrl+Z` / `Ctrl+Shift+Z`.
+- **Undo/Redo (`Ctrl+Z` / `Ctrl+Shift+Z`)**: Revert or reapply recent changes.
 
 ---
 
-## 4. Quality Control (QC)
+## 4. Metric Calculation
 
+Once the segmentation masks are finalized and **saved** (either automatically generated or manually corrected), you can calculate retinal vascular metrics.
 
+### Calculation Controls
+
+- **Single Image**: Click `📊 Metrics` in the bottom panel to calculate metrics for the currently displayed image.
+- **Batch Processing**: Click `📊 Metrics All` to calculate metrics for all images in the loaded folder that have a QC status of `{PASS, BORDERLINE}` and a valid segmentation mask.
+
+### What is Calculated?
+
+The software computes a comprehensive set of metrics including:
+
+- **Vessel Geometry**: Width, tortuosity, fractal dimension.
+- **Optic Disc**: Area, diameter, shape.
+- **Fovea**: Location relative to the optic disc.
+- **Artery/Vein Specifics**: Caliber, density, and A/V ratio.
+
+For a full list of calculated metrics and their definitions, please refer to the [Metric Definitions](./doc_appendix.md#metric-definitions).
 
 ---
 
@@ -111,41 +127,4 @@ If the automated segmentation needs correction, enter **Edit Mode** by clicking 
 Go to the `Database` menu:
 
 - **Export QC Results**: Generates a CSV file with filenames, decisions, and notes.
-- **Export Metrics**: Generates a CSV file with calculated vascular metrics (tortuosity, fractal dimension, etc.).
-
----
-
-## Appendix: Keyboard Shortcuts
-
-| **Navigation** | **Shortcut** |
-| :--- | :--- |
-| Next Image | `Right Arrow` |
-| Previous Image | `Left Arrow` |
-
-| **Tools** | **Shortcut** |
-| :--- | :--- |
-| Brush Tool | `Ctrl + B` |
-| Smart Paint | `Ctrl + Shift + B` |
-| Eraser | `Ctrl + E` |
-| Color Switch | `Ctrl + C` |
-| Save Edits | `Ctrl + S` |
-| Undo | `Ctrl + Z` |
-| Redo | `Ctrl + Shift + Z` |
-| Brush Size Up | `+` or `=` |
-| Brush Size Down | `-` |
-
-| **View / Overlays** | **Shortcut** |
-| :--- | :--- |
-| Show Red Overlay | `1` |
-| Show Green Overlay | `2` |
-| Show Blue Overlay | `3` |
-| Show Vessels Only | `4` |
-| Show All | `5` |
-| Hide Overlay | `6` |
-
-| **Image Channels** | **Shortcut** |
-| :--- | :--- |
-| Color Image | `C` |
-| Red Channel | `R` |
-| Green Channel | `G` |
-| Blue Channel | `B` |
+- **Export Metrics**: Generates a CSV file with calculated vascular metrics.

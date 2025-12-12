@@ -708,13 +708,13 @@ class SegmentationWidget(BaseWidget):
             self,
             "Unsaved Changes",
             "You have unsaved edits. Do you want to save them?",
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Save:
+        if reply == QMessageBox.StandardButton.Yes:
             self._save_state()
             self._save_edits()
-        elif reply == QMessageBox.Cancel:
+        elif reply == QMessageBox.StandardButton.No:
             return False
         
         return True
@@ -870,6 +870,14 @@ class SegmentationWidget(BaseWidget):
             self.status_text.emit(("No images to segment"))
             return
         
+        if self.canvas.overlay_layer.has_changes():
+            QMessageBox.warning(
+                self,
+                "Unsaved Edits",
+                "Please save your edits (Ctrl/Command + S) before re-segmenting the image."
+            )
+            return
+        
         self.status_text.emit(f"Segmenting {len(pending)} images...")
         self.btn_segment_all.setEnabled(False)
         self.btn_segment_all.setStyleSheet(self.button_styles["segment"]["highlighted"])
@@ -890,6 +898,14 @@ class SegmentationWidget(BaseWidget):
         """Segment only the currently displayed image"""
         if not self.image_path:
             self.status_text.emit("No image loaded")
+            return
+        
+        if self.canvas.overlay_layer.has_changes():
+            QMessageBox.warning(
+                self,
+                "Unsaved Edits",
+                "Please save your edits (Ctrl/Command + S) before re-segmenting the image."
+            )
             return
         
         self.status_text.emit(f"Segmenting {self.image_path.name}...")
