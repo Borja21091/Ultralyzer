@@ -95,7 +95,7 @@ class SegmentationStep(ProcessingStep):
                 loc = None
             
             if disc_cx and loc:
-                laterality = "rirght" if loc[1] < disc_cx else "left"
+                laterality = "right" if loc[1] < disc_cx else "left"
                 if metadata:
                     self.db_manager.save_metrics_laterality_by_id(id, laterality)
             
