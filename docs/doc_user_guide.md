@@ -72,7 +72,7 @@ You can run the AI models directly within the app:
 
 ### Visualization Controls
 
-- **Opacity**: Use the vertical slider on the bottom-left to adjust the transparency of the segmentation overlay.
+- **Opacity**: Use the vertical slider on the bottom-left to adjust the transparency of the segmentation overlay (`Ctrl + Scroll`).
 - **Channels**: Toggle specific image/overlay views using the dropdown or [shortcuts](./doc_appendix.md#keyboard-shortcuts#view--overlay-controls).
 
 ---
@@ -91,7 +91,7 @@ If the automated segmentation needs correction, enter **Edit Mode** by clicking 
 
 ### Brush Controls
 
-- **Size**: Adjust using the slider or **`+` / `-` keys**.
+- **Size**: Adjust using the slider or **`+` / `-` keys** (or `Shift + Scroll`).
 
 ### Saving Edits
 

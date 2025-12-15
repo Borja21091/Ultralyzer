@@ -60,7 +60,7 @@ Appears on the right side of the canvas when **"✏️ Edit Mask"** is clicked. 
 * **🧹 Eraser**: Remove incorrect segmentation areas (`Ctrl+E`).
 * **⇄ Color Switch**: Click a vessel to toggle its classification between Artery and Vein (`Ctrl+C`).
 * **🎯 Fovea Location**: Manually place the fovea center point.
-* **Size Slider**: Adjusts the diameter of the brush/eraser tools (`+` / `-` keys).
+* **Size Slider**: Adjusts the diameter of the brush/eraser tools (`+` / `-` keys or `Shift + Scroll`).
 * **Undo/Redo**: Revert or re-apply changes (`Ctrl+Z` / `Ctrl+Shift+Z`).
 
 ![Edit Toolbar](./_static/images/edit_toolbar.png)
@@ -73,7 +73,7 @@ The bottom area is divided into four functional groups:
 
 * **Overlay Dropdown**: Filter what is shown on the canvas (e.g., "Vessels Only", "Red Channel", "All").
 * **Show Fovea**: Toggle the visibility of the fovea marker if available.
-* **Opacity Slider**: Adjust the transparency of the segmentation overlay against the raw image.
+* **Opacity Slider**: Adjust the transparency of the segmentation overlay against the raw image (`Ctrl + Scroll`).
 
 #### Quality Control (Middle-Left)
 

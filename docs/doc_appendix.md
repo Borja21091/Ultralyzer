@@ -14,6 +14,7 @@ The following keyboard shortcuts are available to enhance your workflow within t
 | Show Vessels Only | `4` |
 | Show All | `5` |
 | Hide Overlay | `6` |
+| Opacity Up/Down | `Ctrl + Scroll` |
 
 | **Image Channels** | **Shortcut** |
 | :--- | :--- |
@@ -35,6 +36,7 @@ The following keyboard shortcuts are available to enhance your workflow within t
 | Redo | `Ctrl + Shift + Z` |
 | Brush Size Up | `+` or `=` |
 | Brush Size Down | `-` |
+| Brush Size Up/Down | `Shift + Scroll` |
 
 ### Navigation
 
