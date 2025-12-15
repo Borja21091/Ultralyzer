@@ -664,7 +664,9 @@ class Canvas(QGraphicsView):
     """Main canvas for displaying and editing image layers"""
     
     signal_zoom_changed = Signal()
-    signal_fovea_selected = Signal(float, float)  # x, y coordinates of fovea selection
+    signal_opacity_changed = Signal(float) # Opacity delta
+    signal_brush_radius_changed = Signal(float) # Brush radius delta
+    signal_fovea_selected = Signal(float, float) # x, y coordinates of fovea selection
     
     def __init__(self, image_layer: Optional[ImageLayer]=None, overlay_layer: Optional[OverlayLayer]=None):
         super().__init__()
@@ -898,19 +900,7 @@ class Canvas(QGraphicsView):
         
         self._zoom_level = new_zoom
         event.accept()
-    
-    def _handle_vertical_scroll(self, event):
-        """Scroll vertically"""
-        scrollbar = self.verticalScrollBar()
-        scrollbar.setValue(scrollbar.value() - event.angleDelta().y())
-        event.accept()
-    
-    def _handle_horizontal_scroll(self, event):
-        """Scroll horizontally (Shift + wheel)"""
-        scrollbar = self.horizontalScrollBar()
-        scrollbar.setValue(scrollbar.value() - event.angleDelta().y())
-        event.accept()
-    
+
     ################ EVENTS ################
     
     def mousePressEvent(self, event):
@@ -997,9 +987,22 @@ class Canvas(QGraphicsView):
         modifiers = event.modifiers()
         
         if modifiers == Qt.KeyboardModifier.ControlModifier:
-            self._handle_horizontal_scroll(event)
+            # Adjust opacity
+            delta = event.angleDelta().y()
+            step = 0.01
+            if delta > 0:
+                self.signal_opacity_changed.emit(step)
+            elif delta < 0:
+                self.signal_opacity_changed.emit(-step)
         elif modifiers == Qt.KeyboardModifier.ShiftModifier:
-            self._handle_vertical_scroll(event)
+            if self._edit_mode and self.current_tool in ['brush', 'smart_paint', 'eraser']:
+                    # Increase/decrease brush size
+                    delta = event.angleDelta().y()
+                    step = 1
+                    if delta > 0:
+                        self.signal_brush_radius_changed.emit(step)
+                    elif delta < 0:
+                        self.signal_brush_radius_changed.emit(-step)
         else:
             self._handle_zoom(event)
             self.signal_zoom_changed.emit()

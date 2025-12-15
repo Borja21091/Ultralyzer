@@ -200,7 +200,9 @@ class SegmentationWidget(BaseWidget):
         self.canvas = Canvas()
         self.canvas.signal_zoom_changed.connect(self._update_brush_cursor)
         self.canvas.signal_fovea_selected.connect(self._on_fovea_location_selected)
-        
+        self.canvas.signal_opacity_changed.connect(lambda value: self._on_opacity_changed(self._overlay_opacity + value))
+        self.canvas.signal_opacity_changed.connect(lambda value: self.opacity_slider.setValue(int(min(max(self._overlay_opacity + value, 0.0), 1.0) * 100)))
+        self.canvas.signal_brush_radius_changed.connect(lambda delta: self._on_brush_size_changed(max(self.brush_size + delta, 1)))
         canvas_layout.addWidget(self.canvas)
         self.main_splitter.addWidget(self.canvas_container)
         
@@ -295,7 +297,7 @@ class SegmentationWidget(BaseWidget):
         self.opacity_slider.setValue(75)
         self.opacity_slider.setMaximumHeight(100)
         self.opacity_slider.setToolTip("Adjust overlay opacity")
-        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        self.opacity_slider.valueChanged.connect(lambda value: self._on_opacity_changed(value / 100.0))
         opacity_layout.addWidget(self.opacity_slider, alignment=Qt.AlignmentFlag.AlignHCenter)
         
         self.opacity_label = QLabel("75%")
@@ -645,7 +647,7 @@ class SegmentationWidget(BaseWidget):
                 overlay_array = np.array(Image.open(mask_path))
         
         overlay_layer = OverlayLayer(overlay_array)
-        overlay_layer.opacity = self._overlay_opacity
+        overlay_layer.opacity = int(min(max(self._overlay_opacity * 100, 0), 100))
         self._overlay_layer = overlay_layer
         
         # Create canvas only once, or update existing canvas
@@ -1015,16 +1017,19 @@ class SegmentationWidget(BaseWidget):
         self._save_edits()
         self._save_state()
 
-    def _on_opacity_changed(self, value: int):
+    def _on_opacity_changed(self, value: float):
         """Handle opacity slider changes"""
-        # Update label with percentage
-        self.opacity_label.setText(f"{value}%")
+        # Prepare value
+        value = min(max(value, 0), 1.0)
         
         # Store opacity for future images
-        self._overlay_opacity = value / 100.0
+        self._overlay_opacity = value
+        
+        # Update label with percentage
+        self.opacity_label.setText(f"{int(value * 100)}%")
         
         # Convert to 0.0-1.0 range and update canvas
-        opacity_normalized = value / 100.0
+        opacity_normalized = value
         if self.canvas is not None:
             self.canvas.set_overlay_opacity(opacity_normalized)
 
