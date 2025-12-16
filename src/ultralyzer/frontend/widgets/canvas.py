@@ -998,6 +998,9 @@ class Canvas(QGraphicsView):
             if self._edit_mode and self.current_tool in ['brush', 'smart_paint', 'eraser']:
                     # Increase/decrease brush size
                     delta = event.angleDelta().y()
+                    if delta == 0:
+                        # Handle MacOS behaviour
+                        delta = event.angleDelta().x()
                     step = 1
                     if delta > 0:
                         self.signal_brush_radius_changed.emit(step)
