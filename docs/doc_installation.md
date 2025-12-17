@@ -30,7 +30,7 @@ We recommend using a virtual environment (e.g., Conda) to manage dependencies an
 
 3. **Install Dependencies**:
 
-   Double-click on the `install.bat` or run it from the command line:
+   Run the following command from the command line:
 
    ```bash
    install.bat
