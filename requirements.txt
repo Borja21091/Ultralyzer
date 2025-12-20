@@ -10,6 +10,7 @@ SQLAlchemy
 bottleneck
 torchvision
 scikit-image
+photoshopapi
 scikit-learn
 opencv-python
 segmentation-models-pytorch

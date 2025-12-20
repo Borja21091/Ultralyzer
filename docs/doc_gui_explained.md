@@ -23,6 +23,9 @@ Located at the very top of the window, the menu bar organizes global application
   * **Load Mask Folder**: Load pre-computed segmentation masks (e.g., from external models) to match with currently loaded images.
 * **Segmentation**:
   * **Save**: Saves the current segmentation mask to disk.
+  * **Export to PSD...**:
+    * **All**: Exports all loaded images and their segmentations as layered PSD files.
+    * **Current**: Exports the currently displayed image and its segmentation as a layered PSD file.
   * **A/V Segment**: Triggers specific Artery/Vein segmentation algorithms.
   * **Disc Segment**: Triggers Optic Disc segmentation algorithms.
 * **Database**:

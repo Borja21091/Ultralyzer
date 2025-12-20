@@ -4,14 +4,17 @@ from pathlib import Path
 from definitions import IMAGE_FORMATS, METRIC_DICTIONARY, SEG_DIR
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QFileDialog, QMessageBox, QComboBox, QTextEdit
+    QLabel, QFileDialog, QMessageBox, QComboBox, QTextEdit, 
+    QProgressDialog, QApplication
 )
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from frontend.widgets.widget_base import BaseWidget
 from frontend.widgets.widget_s2 import SegmentationWidget
 from backend.models.database import DatabaseManager
 
 from backend.utils.threads import AVSegmentationWorker, DiscSegmentationWorker
+import photoshopapi as psapi
 
 class MainWindow(QMainWindow):
     """
@@ -113,6 +116,18 @@ class MainWindow(QMainWindow):
         action_save_segmentation = QAction("Save", self)
         action_save_segmentation.triggered.connect(self.widget._save_edits)
         segmentation_menu.addAction(action_save_segmentation)
+        
+        segmentation_menu.addSeparator()
+        
+        export_psd_menu = segmentation_menu.addMenu("Export to PSD...")
+        
+        action_export_psd_all = QAction("All", self)
+        action_export_psd_all.triggered.connect(self._on_export_to_psd_all)
+        export_psd_menu.addAction(action_export_psd_all)
+        
+        action_export_psd_current = QAction("Current", self)
+        action_export_psd_current.triggered.connect(self._on_export_to_psd_current)
+        export_psd_menu.addAction(action_export_psd_current)
         
         segmentation_menu.addSeparator()
         
@@ -455,4 +470,173 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"Error exporting metrics: {str(e)}")
             
+    def _on_export_to_psd_all(self):
+        """Export all segmentations to PSD"""
+        # Get image list from dropdown
+        image_names = self.image_list
         
+        if not image_names:
+            QMessageBox.warning(self, "No Images", "No images loaded to export.")
+            return
+        
+        save_folder = QFileDialog.getExistingDirectory(self, "Select Folder to Save PSD Files")
+        
+        # Setup Progress Dialog
+        progress = QProgressDialog("Initializing export...", "Cancel", 0, len(image_names), self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        k = 0
+        for i, img_name in enumerate(image_names):
+            
+            # Check if user clicked cancel
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Exporting {img_name}...")
+            
+            name = Path(img_name).stem
+            
+            # Find mask in database
+            meta = self._db_manager.get_metadata_by_filename(img_name)
+            if not meta:
+                QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {name}")
+                return
+            seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+            if not seg_meta:
+                QMessageBox.warning(self, "No Segmentation Found", f"No segmentation found for image: {name}")
+                return
+            img_path = Path(meta.folder) / Path(meta.name + meta.extension)
+            seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+            
+            # Check if files exist
+            if not img_path.exists() or not seg_path.exists():
+                QMessageBox.warning(self, "Files Not Found", f"Image or segmentation file not found for: {name}")
+                continue
+            
+            # Read image & mask
+            image = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            green = cv2.cvtColor(image[:,:,1], cv2.COLOR_GRAY2RGB)
+            mask = cv2.imread(str(seg_path), cv2.IMREAD_COLOR)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+            w, h = image.shape[1], image.shape[0]
+
+            arteries = np.zeros((h, w, 4), dtype=np.uint8)
+            arteries[mask[:,:,0] > 0] = [255, 0, 0, 255]
+            veins = np.zeros((h, w, 4), dtype=np.uint8)
+            veins[mask[:,:,2] > 0] = [0, 0, 255, 255]
+            disc = np.zeros((h, w, 4), dtype=np.uint8)
+            disc[mask[:,:,1] > 0] = [0, 255, 0, 255]
+            
+            # Transpose to (C, H, W) for psapi
+            image = np.ascontiguousarray(np.transpose(image, (2, 0, 1)))
+            green = np.ascontiguousarray(np.transpose(green, (2, 0, 1)))
+            arteries = np.ascontiguousarray(np.transpose(arteries, (2, 0, 1)))
+            veins = np.ascontiguousarray(np.transpose(veins, (2, 0, 1)))
+            disc = np.ascontiguousarray(np.transpose(disc, (2, 0, 1)))
+            
+            # Prepare PSD file
+            color_mode = psapi.enum.ColorMode.rgb
+            psd = psapi.LayeredFile_8bit(color_mode, w, h)
+            
+            # Center the layers
+            cx, cy = w / 2, h / 2
+            
+            psd.add_layer(psapi.ImageLayer_8bit(arteries, "Arteries", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+            psd.add_layer(psapi.ImageLayer_8bit(veins, "Veins", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+            psd.add_layer(psapi.ImageLayer_8bit(disc, "Optic Disc", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+            psd.add_layer(psapi.ImageLayer_8bit(green, "Green Channel", width=w, height=h, is_visible=True, is_locked=True, pos_x=cx, pos_y=cy))
+            psd.add_layer(psapi.ImageLayer_8bit(image, "Color Image", width=w, height=h, is_visible=False, is_locked=True, pos_x=cx, pos_y=cy))
+            
+            
+            # Save PSD file
+            psd.write(Path(save_folder) / Path(name + ".psd"))
+            k += 1
+            
+            # Update progress
+            progress.setValue(i + 1)
+            QApplication.processEvents()
+            
+        progress.setValue(len(image_names))        
+        self.statusBar().showMessage(f"Exported {k} / {len(image_names)} PSD files to: {save_folder}")            
+    
+    def _on_export_to_psd_current(self):
+        """Export current segmentation to PSD"""
+        img_name = self.image_dropdown.currentText()
+        name = Path(img_name).stem
+        
+        if not img_name:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image to export.")
+            return
+        
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save PSD File",
+            name + ".psd",
+            "PSD Files (*.psd);;All Files (*)"
+        )
+        
+        if not save_path:
+            return
+        
+        # Find mask in database
+        meta = self._db_manager.get_metadata_by_filename(name)
+        if not meta:
+            QMessageBox.warning(self, "Image Not in Database", f"The selected image is not in the database: {name}")
+            return
+        seg_meta = self._db_manager.get_segmentation_result_by_id(meta.id)
+        if not seg_meta:
+            QMessageBox.warning(self, "No Segmentation Found", f"No segmentation found for image: {name}")
+            return
+        img_path = Path(meta.folder) / Path(meta.name + meta.extension)
+        seg_path = Path(seg_meta.seg_folder) / Path(meta.name + seg_meta.extension)
+        
+        # Check if files exist
+        if not img_path.exists() or not seg_path.exists():
+            QMessageBox.warning(self, "Files Not Found", f"Image or segmentation file not found for: {name}")
+            return
+        
+        # Read image & mask
+        image = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        green = cv2.cvtColor(image[:,:,1], cv2.COLOR_GRAY2RGB)
+        mask = cv2.imread(str(seg_path), cv2.IMREAD_COLOR)
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+        w, h = image.shape[1], image.shape[0]
+
+        arteries = np.zeros((h, w, 4), dtype=np.uint8)
+        arteries[mask[:,:,0] > 0] = [255, 0, 0, 255]
+        veins = np.zeros((h, w, 4), dtype=np.uint8)
+        veins[mask[:,:,2] > 0] = [0, 0, 255, 255]
+        disc = np.zeros((h, w, 4), dtype=np.uint8)
+        disc[mask[:,:,1] > 0] = [0, 255, 0, 255]
+        
+        # Transpose to (C, H, W) for psapi
+        image = np.ascontiguousarray(np.transpose(image, (2, 0, 1)))
+        green = np.ascontiguousarray(np.transpose(green, (2, 0, 1)))
+        arteries = np.ascontiguousarray(np.transpose(arteries, (2, 0, 1)))
+        veins = np.ascontiguousarray(np.transpose(veins, (2, 0, 1)))
+        disc = np.ascontiguousarray(np.transpose(disc, (2, 0, 1)))
+        
+        # Prepare PSD file
+        w, h = image.shape[2], image.shape[1]
+        color_mode = psapi.enum.ColorMode.rgb
+        psd = psapi.LayeredFile_8bit(color_mode, w, h)
+        
+        # Center the layers
+        cx, cy = w / 2, h / 2
+        
+        psd.add_layer(psapi.ImageLayer_8bit(arteries, "Arteries", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+        psd.add_layer(psapi.ImageLayer_8bit(veins, "Veins", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+        psd.add_layer(psapi.ImageLayer_8bit(disc, "Optic Disc", width=w, height=h, opacity=0.5, pos_x=cx, pos_y=cy))
+        psd.add_layer(psapi.ImageLayer_8bit(green, "Green Channel", width=w, height=h, is_visible=True, is_locked=True, pos_x=cx, pos_y=cy))
+        psd.add_layer(psapi.ImageLayer_8bit(image, "Color Image", width=w, height=h, is_visible=False, is_locked=True, pos_x=cx, pos_y=cy))
+        
+        # Save PSD file
+        print(save_path)
+        psd.write(save_path)
+        
+        self.statusBar().showMessage(f"Exported PSD file to: {save_path}")
+
