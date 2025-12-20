@@ -128,3 +128,10 @@ Go to the `Database` menu:
 
 - **Export QC Results**: Generates a CSV file with filenames, decisions, and notes.
 - **Export Metrics**: Generates a CSV file with calculated vascular metrics.
+
+Go to the `Segmentation` menu:
+
+- **Export to PSD...**: Exports images and segmentations as layered Photoshop (PSD) files. The PSD file will contain separate layers for `Arteries`, `Veins` and `Optic Disc` segmentation masks as well as the original `Color Image` and its `Green Channel` (for better vessel visibility and discrimation).
+
+  - **All**: Exports all loaded images with corresponding segmentations.
+  - **Current**: Exports only the currently displayed image and its segmentation mask.
